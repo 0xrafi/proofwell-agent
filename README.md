@@ -7,39 +7,39 @@ Proofwell is a screen time accountability app where users stake crypto on their 
 ## Architecture
 
 ```
-                    ┌──────────────────────────────────────────────┐
-                    │               Proofwell iOS App              │
-                    │  Stake crypto on screen time goals           │
-                    │  DeviceActivity verification + P256 proofs   │
-                    └──────────────────┬───────────────────────────┘
-                                       │ stakeUSDCV3 / submitDayProofV3
-                                       ▼
-                    ┌──────────────────────────────────────────────┐
-                    │          ProofwellStakingV3 (Base)           │
-                    │  Multi-stake | Cohort pools | Treasury split │
-                    └──────┬───────────────────────────┬───────────┘
-                           │ resolveExpiredV3()        │ treasury fees
-                           ▼                           ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                      Proofwell Agent (this repo)                   │
-│                                                                    │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────────────┐ │
-│  │ Decision     │  │ Aave V3      │  │ x402 Attestation          │ │
-│  │ Engine       │  │ Supply/      │  │ "Is this wallet           │ │
-│  │ (rules +    │  │ Withdraw     │  │  disciplined?"             │ │
-│  │  LLM)       │  │ USDC         │  │ 0.01 USDC/query           │ │
-│  └─────────────┘  └──────────────┘  └───────────────────────────┘ │
-│                                                                    │
-│  Every tx includes ERC-8021 builder code suffix                    │
-│  All actions logged to SQLite → exposed via API → dashboard        │
-└────────────────────────────────────────────────────────────────────┘
+                ┌───────────────────────────────────────────┐
+                │           Proofwell iOS App                │
+                │  Stake crypto on screen time goals         │
+                │  DeviceActivity verification + P256 proofs │
+                └─────────────────┬─────────────────────────┘
+                                  │ stakeUSDCV3 / submitDayProofV3
+                                  ▼
+                ┌───────────────────────────────────────────┐
+                │        ProofwellStakingV3 (Base)          │
+                │  Multi-stake | Cohort pools | Treasury    │
+                └─────┬─────────────────────────────┬───────┘
+                      │ resolveExpiredV3()           │ treasury fees
+                      ▼                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  Proofwell Agent (this repo)                  │
+│                                                              │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
+│  │ Decision     │ │ Aave V3      │ │ x402 Attestation     │ │
+│  │ Engine       │ │ Supply/      │ │ "Is this wallet      │ │
+│  │ (rules +    │ │ Withdraw     │ │  disciplined?"        │ │
+│  │  LLM)       │ │ USDC         │ │ 0.01 USDC/query      │ │
+│  └──────────────┘ └──────────────┘ └──────────────────────┘ │
+│                                                              │
+│  Every tx includes ERC-8021 builder code suffix              │
+│  All actions logged to SQLite → exposed via API → dashboard  │
+└──────────────────────────┬───────────────────────────────────┘
                            │
                            ▼
-                    ┌──────────────────────────────────────────────┐
-                    │            Dashboard (Next.js)               │
-                    │  Live balances · P&L · Action log            │
-                    │  Self-sustaining score · x402 demo           │
-                    └──────────────────────────────────────────────┘
+                ┌───────────────────────────────────────────┐
+                │           Dashboard (Next.js)             │
+                │  Live balances · P&L · Action log         │
+                │  Self-sustaining score · x402 demo        │
+                └───────────────────────────────────────────┘
 ```
 
 ## The Problem Proofwell Agent Solves
@@ -133,7 +133,7 @@ npm run dashboard
 | MockUSDC (Proofwell) | `0x22b90da5d436a4Aaf5464A540c62DB4aA59854eE` |
 | Aave V3 Pool | `0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27` |
 | Aave Test USDC | `0xba50Cd2A20f6DA35D788639E581bca8d0B5d4D5f` |
-| aBasUSDC | `0x10F1A9D11CDf50041f3f8cB7191CBe2f31750ACC` |
+| aBasUSDC | `0x10F1A9D11CDf50041f3f8cB7191CBE2f31750ACC` |
 
 ### Base Mainnet
 | Contract | Address |
@@ -156,8 +156,8 @@ Most hackathon agents are chatbots with a wallet. This agent has a **real busine
 
 ## Links
 
-- **Dashboard**: [proofwell-agent.pages.dev](https://proofwell-agent.pages.dev) (once deployed)
-- **Agent wallet**: (visible on BaseScan once running)
+- **Dashboard**: [proofwell-agent.pages.dev](https://proofwell-agent.pages.dev)
+- **Agent wallet**: [`0x296632B99bEf874e99D333ED80C730530D117721`](https://sepolia.basescan.org/address/0x296632B99bEf874e99D333ED80C730530D117721)
 - **Proofwell iOS app**: [App Store](https://apps.apple.com/app/proofwell)
 - **Staking contract**: [proofwell-contracts](https://github.com/0xrafi/proofwell-contracts)
 
