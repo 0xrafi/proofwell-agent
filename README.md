@@ -8,9 +8,9 @@ Proofwell is a screen time accountability app where users stake crypto on their 
 
 ```
                 ┌───────────────────────────────────────────┐
-                │           Proofwell iOS App                │
-                │  Stake crypto on screen time goals         │
-                │  DeviceActivity verification + P256 proofs │
+                │           Proofwell iOS App               │
+                │  Stake crypto on screen time goals        │
+                │ DeviceActivity verification + P256 proofs │
                 └─────────────────┬─────────────────────────┘
                                   │ stakeUSDCV3 / submitDayProofV3
                                   ▼
@@ -21,14 +21,14 @@ Proofwell is a screen time accountability app where users stake crypto on their 
                       │ resolveExpiredV3()           │ treasury fees
                       ▼                              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                  Proofwell Agent (this repo)                  │
+│                  Proofwell Agent (this repo)                 │
 │                                                              │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
-│  │ Decision     │ │ Aave V3      │ │ x402 Attestation     │ │
-│  │ Engine       │ │ Supply/      │ │ "Is this wallet      │ │
-│  │ (rules +    │ │ Withdraw     │ │  disciplined?"        │ │
-│  │  LLM)       │ │ USDC         │ │ 0.01 USDC/query      │ │
-│  └──────────────┘ └──────────────┘ └──────────────────────┘ │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐  │
+│  │ Decision     │ │ Aave V3      │ │ x402 Attestation     │  │
+│  │ Engine       │ │ Supply/      │ │ "Is this wallet      │  │
+│  │ (rules +     │ │ Withdraw     │ │  disciplined?"       │  │
+│  │  LLM)        │ │ USDC         │ │ 0.01 USDC/query      │  │
+│  └──────────────┘ └──────────────┘ └──────────────────────┘  │
 │                                                              │
 │  Every tx includes ERC-8021 builder code suffix              │
 │  All actions logged to SQLite → exposed via API → dashboard  │
