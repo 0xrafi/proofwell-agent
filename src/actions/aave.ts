@@ -1,4 +1,4 @@
-import { encodeFunctionData, type Address, formatUnits } from "viem";
+import { encodeFunctionData, type Address, formatUnits, type Hash } from "viem";
 import { publicClient, agentAddress, sendTransaction } from "../agent/wallet.js";
 import { config } from "../config.js";
 
@@ -67,7 +67,9 @@ async function ensureApproval(amount: bigint): Promise<void> {
       functionName: "approve",
       args: [config.aavePool, amount],
     });
-    await sendTransaction({ to: config.aaveUsdc, data });
+    const hash = await sendTransaction({ to: config.aaveUsdc, data });
+    // Wait for approve to be mined before proceeding
+    await publicClient.waitForTransactionReceipt({ hash: hash as Hash });
     console.log(`[aave] Approved ${formatUnits(amount, 6)} USDC for Aave`);
   }
 }

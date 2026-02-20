@@ -273,7 +273,7 @@ export async function resolveExpired(user: Address, stakeId: bigint): Promise<st
 /** Scan for stakers by reading recent V3 Staked events */
 export async function findActiveStakers(fromBlock?: bigint): Promise<Address[]> {
   const currentBlock = await publicClient.getBlockNumber();
-  const from = fromBlock ?? currentBlock - 100000n; // ~4 days of blocks
+  const from = fromBlock ?? currentBlock - 9900n; // ~8 hours on Base (2s blocks), within RPC log limits
 
   const [ethEvents, usdcEvents] = await Promise.all([
     publicClient.getLogs({

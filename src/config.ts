@@ -3,9 +3,14 @@ import { base, baseSepolia } from "viem/chains";
 import "dotenv/config";
 
 function env(key: string, fallback?: string): string {
-  const val = process.env[key] ?? fallback;
+  const val = process.env[key] || fallback;
   if (!val) throw new Error(`Missing env: ${key}`);
   return val;
+}
+
+/** Optional env var — returns empty string if not set */
+function optEnv(key: string, fallback = ""): string {
+  return process.env[key] || fallback;
 }
 
 type Network = "base-mainnet" | "base-sepolia";
@@ -27,7 +32,7 @@ const addresses = {
     aaveUsdc: "0xba50Cd2A20f6DA35D788639E581bca8d0B5d4D5f" as Address, // Aave test USDC
     weth: "0x4200000000000000000000000000000000000006" as Address,
     aavePool: "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27" as Address,
-    aBasUSDC: "0x10F1A9D11CDf50041f3f8cB7191CBe2f31750ACC" as Address,
+    aBasUSDC: "0x10F1A9D11CDf50041f3f8cB7191CBE2f31750ACC" as Address,
   },
 } as const;
 
@@ -75,7 +80,7 @@ export const config = {
 
   // API
   port: parseInt(env("PORT", "3001")),
-  openaiApiKey: env("OPENAI_API_KEY", ""),
+  openaiApiKey: optEnv("OPENAI_API_KEY"),
 
   // x402 attestation pricing (0.01 USDC = 10000 in 6 decimals)
   attestationPriceUsdc: BigInt("10000"),
