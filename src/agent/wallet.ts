@@ -3,8 +3,10 @@ import {
   createPublicClient,
   http,
   type Address,
+  type Chain,
   type Hash,
-  type TransactionRequest,
+  type WalletClient,
+  type PublicClient,
   formatEther,
   formatUnits,
 } from "viem";
@@ -13,15 +15,16 @@ import { config } from "../config.js";
 import { appendBuilderCode } from "../actions/builder-codes.js";
 
 const account = privateKeyToAccount(config.privateKey);
+const chain = config.chain as Chain;
 
-export const publicClient = createPublicClient({
-  chain: config.chain,
+export const publicClient: PublicClient = createPublicClient({
+  chain,
   transport: http(config.rpcUrl),
 });
 
-export const walletClient = createWalletClient({
+export const walletClient: WalletClient = createWalletClient({
   account,
-  chain: config.chain,
+  chain,
   transport: http(config.rpcUrl),
 });
 
@@ -38,6 +41,8 @@ export async function sendTransaction(tx: {
     : appendBuilderCode("0x", config.builderCode);
 
   const hash = await walletClient.sendTransaction({
+    account,
+    chain,
     to: tx.to,
     data,
     value: tx.value ?? 0n,
@@ -47,22 +52,51 @@ export async function sendTransaction(tx: {
   return hash;
 }
 
+const balanceOfAbi = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
 export async function getBalances() {
-  const [ethBalance, usdcBalance, aUsdcBalance] = await Promise.all([
+  // Always read Proofwell USDC + Aave USDC balances
+  // On mainnet these are the same token; on testnet they differ
+  const reads: Promise<bigint>[] = [
     publicClient.getBalance({ address: agentAddress }),
     publicClient.readContract({
       address: config.usdc,
-      abi: [{ name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ name: "", type: "uint256" }] }],
+      abi: balanceOfAbi,
       functionName: "balanceOf",
       args: [agentAddress],
     }) as Promise<bigint>,
     publicClient.readContract({
       address: config.aBasUSDC,
-      abi: [{ name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ name: "", type: "uint256" }] }],
+      abi: balanceOfAbi,
       functionName: "balanceOf",
       args: [agentAddress],
     }) as Promise<bigint>,
-  ]);
+  ];
+
+  // If Aave USDC differs from Proofwell USDC, also read it
+  const hasSeparateAaveUsdc = config.aaveUsdc !== config.usdc;
+  if (hasSeparateAaveUsdc) {
+    reads.push(
+      publicClient.readContract({
+        address: config.aaveUsdc,
+        abi: balanceOfAbi,
+        functionName: "balanceOf",
+        args: [agentAddress],
+      }) as Promise<bigint>,
+    );
+  }
+
+  const results = await Promise.all(reads);
+  const [ethBalance, usdcBalance, aUsdcBalance] = results;
+  const aaveUsdcBalance = hasSeparateAaveUsdc ? results[3] : usdcBalance;
 
   return {
     eth: ethBalance,
@@ -71,5 +105,7 @@ export async function getBalances() {
     usdcFormatted: formatUnits(usdcBalance, 6),
     aUsdc: aUsdcBalance,
     aUsdcFormatted: formatUnits(aUsdcBalance, 6),
+    aaveUsdc: aaveUsdcBalance,
+    aaveUsdcFormatted: formatUnits(aaveUsdcBalance, 6),
   };
 }

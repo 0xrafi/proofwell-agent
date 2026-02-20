@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Proofwell Agent",
-  description: "Autonomous treasury agent on Base mainnet",
+  description: "Autonomous treasury agent on Base",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

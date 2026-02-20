@@ -7,12 +7,14 @@ import { startApiServer } from "../api/server.js";
 async function printStatus() {
   const balances = await getBalances();
   console.log(`\n========== Proofwell Agent ==========`);
-  console.log(`Address: ${agentAddress}`);
-  console.log(`ETH:     ${balances.ethFormatted}`);
-  console.log(`USDC:    ${balances.usdcFormatted}`);
-  console.log(`aUSDC:   ${balances.aUsdcFormatted}`);
+  console.log(`Network:  ${config.network}`);
+  console.log(`Address:  ${agentAddress}`);
+  console.log(`ETH:      ${balances.ethFormatted}`);
+  console.log(`USDC:     ${balances.usdcFormatted}`);
+  console.log(`aUSDC:    ${balances.aUsdcFormatted}`);
   console.log(`Contract: ${config.proofwellContract}`);
-  console.log(`Loop:    every ${config.loopIntervalMs / 1000}s`);
+  console.log(`Explorer: ${config.explorerUrl}`);
+  console.log(`Loop:     every ${config.loopIntervalMs / 1000}s`);
   console.log(`=====================================\n`);
 }
 
@@ -37,7 +39,7 @@ async function main() {
 
   await printStatus();
 
-  logAction("startup", `Agent started at ${agentAddress}`);
+  logAction("startup", `Agent started at ${agentAddress} on ${config.network}`);
 
   // Start API server
   startApiServer();

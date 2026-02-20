@@ -20,7 +20,7 @@ app.use(express.json());
 
 // Health check
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", agent: agentAddress });
+  res.json({ status: "ok", agent: agentAddress, network: config.network });
 });
 
 // Agent status
@@ -36,6 +36,8 @@ app.get("/api/status", async (_req, res) => {
 
     res.json({
       agent: agentAddress,
+      network: config.network,
+      explorerUrl: config.explorerUrl,
       proofwellContract: config.proofwellContract,
       uptime: {
         cycleCount: parseInt(cycleCount),
@@ -124,7 +126,7 @@ app.get("/v1/attestation/:wallet", attestationHandler);
 
 export function startApiServer() {
   app.listen(config.port, () => {
-    console.log(`[api] Server running on port ${config.port}`);
+    console.log(`[api] Server running on port ${config.port} (${config.network})`);
     console.log(`[api] Dashboard API: http://localhost:${config.port}/api/status`);
     console.log(`[api] x402 attestation: http://localhost:${config.port}/v1/attestation/:wallet`);
   });

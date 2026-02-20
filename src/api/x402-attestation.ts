@@ -1,6 +1,6 @@
 import { type Request, type Response } from "express";
 import { type Address, isAddress } from "viem";
-import { getStake, type StakeInfo, getCurrentWeek, getCohortInfo } from "../actions/proofwell.js";
+import { getActiveStakes, type StakeInfo } from "../actions/proofwell.js";
 import { logRevenue } from "../agent/state.js";
 import { config } from "../config.js";
 
@@ -9,7 +9,7 @@ import { config } from "../config.js";
  *
  * Returns behavioral attestation data for a wallet:
  * - Is this wallet staking on Proofwell?
- * - What's their success rate?
+ * - What's their success rate across all V3 stakes?
  * - Discipline score (0-100)
  *
  * In production, this is gated by @x402/express middleware
@@ -26,13 +26,12 @@ export async function attestationHandler(req: Request, res: Response) {
   }
 
   try {
-    const stake = await getStake(wallet);
-    const attestation = buildAttestation(wallet, stake);
+    const stakes = await getActiveStakes(wallet);
+    const attestation = buildAttestation(wallet, stakes);
 
     // Check for x402 payment receipt in header
     const paymentReceipt = req.headers["x-payment-receipt"];
     if (paymentReceipt) {
-      // Log revenue from x402 payment
       logRevenue("x402_attestation", 0.01, undefined, `Attestation query for ${wallet}`);
     }
 
@@ -52,6 +51,7 @@ export async function attestationHandler(req: Request, res: Response) {
 interface Attestation {
   wallet: Address;
   isStaking: boolean;
+  totalStakes: number;
   stakeAmount: string;
   stakeAsset: string;
   daysCompleted: number;
@@ -63,33 +63,47 @@ interface Attestation {
   source: string;
 }
 
-function buildAttestation(wallet: Address, stake: StakeInfo): Attestation {
-  const isStaking = stake.amount > 0n;
-  const daysCompleted = Number(stake.successfulDays);
-  const totalDays = Number(stake.durationDays);
-  const successRate = totalDays > 0 ? daysCompleted / totalDays : 0;
+function buildAttestation(wallet: Address, stakes: StakeInfo[]): Attestation {
+  if (stakes.length === 0) return buildEmptyAttestation(wallet);
 
-  // Discipline score: weighted by stake amount, duration, and success rate
-  // Higher stakes + longer durations + better rates = higher score
-  const durationWeight = Math.min(totalDays / 30, 1); // Max at 30 days
-  const disciplineScore = Math.round(successRate * 100 * (0.5 + 0.5 * durationWeight));
+  // Aggregate across all active stakes
+  let totalSuccessful = 0;
+  let totalDuration = 0;
+  let totalAmountUsdc = 0n;
+  let totalAmountEth = 0n;
+  let hasActive = false;
 
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const stakeEnd = stake.startTimestamp + stake.durationDays * 86400n;
-  const isActive = isStaking && !stake.claimed && now < stakeEnd;
+
+  for (const s of stakes) {
+    totalSuccessful += Number(s.successfulDays);
+    totalDuration += Number(s.durationDays);
+    if (s.isUSDC) totalAmountUsdc += s.amount;
+    else totalAmountEth += s.amount;
+
+    const stakeEnd = s.startTimestamp + s.durationDays * 86400n;
+    if (!s.claimed && now < stakeEnd) hasActive = true;
+  }
+
+  const successRate = totalDuration > 0 ? totalSuccessful / totalDuration : 0;
+  const durationWeight = Math.min(totalDuration / 30, 1);
+  const disciplineScore = Math.round(successRate * 100 * (0.5 + 0.5 * durationWeight));
+
+  const amountStr = totalAmountUsdc > 0n
+    ? `${Number(totalAmountUsdc) / 1_000_000} USDC`
+    : `${Number(totalAmountEth) / 1e18} ETH`;
 
   return {
     wallet,
-    isStaking,
-    stakeAmount: stake.isUSDC
-      ? `${Number(stake.amount) / 1_000_000} USDC`
-      : `${Number(stake.amount) / 1e18} ETH`,
-    stakeAsset: stake.isUSDC ? "USDC" : "ETH",
-    daysCompleted,
-    totalDays,
+    isStaking: true,
+    totalStakes: stakes.length,
+    stakeAmount: amountStr,
+    stakeAsset: totalAmountUsdc > 0n ? "USDC" : "ETH",
+    daysCompleted: totalSuccessful,
+    totalDays: totalDuration,
     successRate: Math.round(successRate * 100) / 100,
     disciplineScore,
-    isActive,
+    isActive: hasActive,
     timestamp: new Date().toISOString(),
     source: "proofwell-agent",
   };
@@ -99,6 +113,7 @@ function buildEmptyAttestation(wallet: Address): Attestation {
   return {
     wallet,
     isStaking: false,
+    totalStakes: 0,
     stakeAmount: "0",
     stakeAsset: "none",
     daysCompleted: 0,

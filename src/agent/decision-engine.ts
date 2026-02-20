@@ -4,7 +4,7 @@ import { getBalances, agentAddress, publicClient } from "./wallet.js";
 import { supplyUsdc, withdrawUsdc, getAavePosition } from "../actions/aave.js";
 import {
   findActiveStakers,
-  getStake,
+  getActiveStakes,
   isResolvable,
   resolveExpired,
   formatStake,
@@ -43,12 +43,14 @@ async function deterministicDecisions(): Promise<Decision[]> {
   const state = await gatherState();
   const { balances } = state;
 
-  // Rule 1: Idle USDC above threshold → deposit to Aave
-  if (balances.usdc > config.idleUsdcThreshold) {
-    const depositAmount = balances.usdc - config.idleUsdcThreshold / 2n; // Keep some liquid
+  // Rule 1: Idle Aave USDC above threshold → deposit to Aave
+  // On testnet, Aave uses a different USDC than Proofwell. Use aaveUsdc balance.
+  const aaveUsdcBalance = balances.aaveUsdc;
+  if (aaveUsdcBalance > config.idleUsdcThreshold) {
+    const depositAmount = aaveUsdcBalance - config.idleUsdcThreshold / 2n; // Keep some liquid
     decisions.push({
       action: "aave_supply",
-      reason: `Idle USDC (${balances.usdcFormatted}) > threshold → depositing ${formatUnits(depositAmount, 6)} to Aave`,
+      reason: `Idle USDC (${formatUnits(aaveUsdcBalance, 6)}) > threshold → depositing ${formatUnits(depositAmount, 6)} to Aave`,
       execute: async () => {
         const hash = await supplyUsdc(depositAmount);
         logAction("aave_supply", `Deposited ${formatUnits(depositAmount, 6)} USDC to Aave`, hash, Number(formatUnits(depositAmount, 6)));
@@ -56,22 +58,24 @@ async function deterministicDecisions(): Promise<Decision[]> {
     });
   }
 
-  // Rule 2: Find and resolve expired stakes
+  // Rule 2: Find and resolve expired V3 stakes
   if (config.proofwellContract !== "0x0000000000000000000000000000000000000000") {
     try {
       const stakers = await findActiveStakers();
       for (const user of stakers) {
-        const stake = await getStake(user);
-        if (isResolvable(stake)) {
-          decisions.push({
-            action: "resolve_expired",
-            reason: `Stake ${formatStake(stake)} is expired + past buffer → resolving for treasury`,
-            execute: async () => {
-              const hash = await resolveExpired(user);
-              logAction("resolve_expired", `Resolved expired stake for ${user}`, hash);
-              logRevenue("treasury_slash", 0, hash, `Resolved ${user}`);
-            },
-          });
+        const stakes = await getActiveStakes(user);
+        for (const stake of stakes) {
+          if (isResolvable(stake)) {
+            decisions.push({
+              action: "resolve_expired",
+              reason: `Stake ${formatStake(stake)} is expired + past buffer → resolving for treasury`,
+              execute: async () => {
+                const hash = await resolveExpired(user, stake.stakeId);
+                logAction("resolve_expired", `Resolved expired stake for ${user}[${stake.stakeId}]`, hash);
+                logRevenue("treasury_slash", 0, hash, `Resolved ${user}[${stake.stakeId}]`);
+              },
+            });
+          }
         }
       }
     } catch (e: any) {
@@ -79,7 +83,7 @@ async function deterministicDecisions(): Promise<Decision[]> {
     }
   }
 
-  // Rule 3: Low ETH for gas → log warning (swap would need a DEX integration)
+  // Rule 3: Low ETH for gas → log warning
   if (balances.eth < config.lowEthThreshold) {
     decisions.push({
       action: "low_eth_warning",
@@ -105,16 +109,18 @@ async function llmDecision(): Promise<Decision | null> {
 
   const state = await gatherState();
   const { balances, aavePosition } = state;
-  const totalUsdc = balances.usdc + aavePosition;
+  const aaveUsdcBalance = balances.aaveUsdc;
+  const totalUsdc = aaveUsdcBalance + aavePosition;
   const aavePercent = totalUsdc > 0n ? Number((aavePosition * 100n) / totalUsdc) : 0;
 
   const openai = new OpenAI({ apiKey: config.openaiApiKey });
 
-  const prompt = `You are a DeFi treasury agent for Proofwell on Base mainnet.
+  const prompt = `You are a DeFi treasury agent for Proofwell on Base (${config.network}).
 
 Current state:
 - Wallet ETH: ${balances.ethFormatted}
-- Wallet USDC: ${balances.usdcFormatted}
+- Wallet USDC (Proofwell): ${balances.usdcFormatted}
+- Wallet USDC (Aave): ${formatUnits(aaveUsdcBalance, 6)}
 - Aave aUSDC: ${formatUnits(aavePosition, 6)}
 - Total USDC value: ${formatUnits(totalUsdc, 6)}
 - % in Aave: ${aavePercent}%
@@ -136,7 +142,6 @@ Should you rebalance? Reply with JSON:
       max_tokens: 200,
     });
 
-    // Log LLM cost (~$0.0001 per call for gpt-4o-mini)
     logCost("llm", 0.0001, "gpt-4o-mini rebalance decision");
     setState("last_llm_call", String(now));
 
@@ -153,7 +158,7 @@ Should you rebalance? Reply with JSON:
 
     const amountRaw = BigInt(Math.floor(decision.amount_usdc * 1_000_000));
 
-    if (decision.action === "deposit" && amountRaw > 0n && amountRaw <= balances.usdc) {
+    if (decision.action === "deposit" && amountRaw > 0n && amountRaw <= aaveUsdcBalance) {
       return {
         action: "llm_deposit",
         reason: `LLM: ${decision.reason}`,

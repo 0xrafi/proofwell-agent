@@ -52,10 +52,10 @@ const erc20Abi = [
   },
 ] as const;
 
-/** Approve USDC spending for Aave pool if needed */
+/** Approve Aave USDC spending for Aave pool if needed */
 async function ensureApproval(amount: bigint): Promise<void> {
   const allowance = (await publicClient.readContract({
-    address: config.usdc,
+    address: config.aaveUsdc,
     abi: erc20Abi,
     functionName: "allowance",
     args: [agentAddress, config.aavePool],
@@ -67,19 +67,19 @@ async function ensureApproval(amount: bigint): Promise<void> {
       functionName: "approve",
       args: [config.aavePool, amount],
     });
-    await sendTransaction({ to: config.usdc, data });
+    await sendTransaction({ to: config.aaveUsdc, data });
     console.log(`[aave] Approved ${formatUnits(amount, 6)} USDC for Aave`);
   }
 }
 
-/** Supply USDC to Aave V3 to earn yield */
+/** Supply USDC to Aave V3 to earn yield (uses Aave's USDC, not Proofwell's MockUSDC) */
 export async function supplyUsdc(amount: bigint): Promise<string> {
   await ensureApproval(amount);
 
   const data = encodeFunctionData({
     abi: aavePoolAbi,
     functionName: "supply",
-    args: [config.usdc, amount, agentAddress, 0],
+    args: [config.aaveUsdc, amount, agentAddress, 0],
   });
 
   const hash = await sendTransaction({ to: config.aavePool, data });
@@ -92,7 +92,7 @@ export async function withdrawUsdc(amount: bigint): Promise<string> {
   const data = encodeFunctionData({
     abi: aavePoolAbi,
     functionName: "withdraw",
-    args: [config.usdc, amount, agentAddress],
+    args: [config.aaveUsdc, amount, agentAddress],
   });
 
   const hash = await sendTransaction({ to: config.aavePool, data });

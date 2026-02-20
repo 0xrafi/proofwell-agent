@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "deploy": "next build && wrangler pages deploy out --project-name=proofwell-agent"
   },
   "dependencies": {
     "next": "^15.1.0",
