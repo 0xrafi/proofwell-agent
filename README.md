@@ -89,6 +89,7 @@ The x402 endpoint answers: **"Is this wallet holder disciplined?"** — a new on
 - **Data**: SQLite (actions, revenue, costs)
 - **API**: Express (dashboard endpoints + x402 attestation)
 - **Dashboard**: Next.js + Tailwind CSS → Cloudflare Pages
+- **Hosting**: Railway (agent) + Cloudflare Pages (dashboard)
 - **Builder Codes**: ERC-8021 suffix on every transaction
 - **Payments**: x402 protocol for paid attestation queries
 
@@ -101,6 +102,15 @@ The agent is a self-sustaining autonomous actor on Base:
 - Pays its own gas and compute costs
 - Makes autonomous DeFi decisions (deposit, withdraw, resolve)
 - Public dashboard proves revenue vs costs in real-time
+
+## Deployment
+
+The agent runs 24/7 on Railway with the dashboard on Cloudflare Pages.
+
+- **Agent API**: `https://agent-production-e120.up.railway.app`
+- **Dashboard**: `https://proofwell-agent.pages.dev`
+
+Railway auto-detects the `Dockerfile`, builds with `tsc`, and runs `node dist/agent/index.js`. Environment variables are set via `railway variables set`. The healthcheck endpoint at `/health` is monitored with auto-restart on failure.
 
 ## Running Locally
 
@@ -156,6 +166,7 @@ Most hackathon agents are chatbots with a wallet. This agent has a **real busine
 
 ## Links
 
+- **Live agent API**: [agent-production-e120.up.railway.app](https://agent-production-e120.up.railway.app/health)
 - **Dashboard**: [proofwell-agent.pages.dev](https://proofwell-agent.pages.dev)
 - **Agent wallet**: [`0x296632B99bEf874e99D333ED80C730530D117721`](https://sepolia.basescan.org/address/0x296632B99bEf874e99D333ED80C730530D117721)
 - **Proofwell iOS app**: [App Store](https://apps.apple.com/app/proofwell)
