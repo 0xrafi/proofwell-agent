@@ -76,7 +76,10 @@ async function ensureApproval(amount: bigint): Promise<void> {
       to: config.aaveUsdc,
       data,
     });
-    await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status === "reverted") {
+      throw new Error(`USDC approval ${hash} reverted on-chain`);
+    }
     console.log(`[aave] Approved USDC for Aave pool`);
   }
 }

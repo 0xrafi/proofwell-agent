@@ -144,7 +144,7 @@ const stakeEvents = [
   },
 ] as const;
 
-const SECONDS_PER_DAY = 300;       // matches contract demo constants
+export const SECONDS_PER_DAY = 300;       // matches contract demo constants
 const RESOLUTION_BUFFER = 0;       // matches contract demo constants
 
 const KNOWN_STAKERS: Address[] = [
@@ -218,14 +218,13 @@ export async function getActiveStakes(user: Address): Promise<StakeInfo[]> {
     args: [user],
   }) as bigint;
 
-  const stakes: StakeInfo[] = [];
-  for (let i = 0n; i < nextId; i++) {
-    const stake = await getStake(user, i);
-    if (stake.amount > 0n && !stake.claimed) {
-      stakes.push(stake);
-    }
+  const cappedId = nextId > 50n ? 50n : nextId;
+  const stakePromises: Promise<StakeInfo>[] = [];
+  for (let i = 0n; i < cappedId; i++) {
+    stakePromises.push(getStake(user, i));
   }
-  return stakes;
+  const allStakes = await Promise.all(stakePromises);
+  return allStakes.filter(s => s.amount > 0n && !s.claimed);
 }
 
 /** Get treasury address from contract */

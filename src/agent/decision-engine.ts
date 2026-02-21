@@ -86,19 +86,24 @@ async function deterministicDecisions(): Promise<Decision[]> {
 
   // Rule 2: Find and resolve expired V3 stakes
   if (config.proofwellContract !== "0x0000000000000000000000000000000000000000") {
+    let stakers: Address[] = [];
     try {
-      const stakers = await findActiveStakers();
-      for (const user of stakers) {
+      stakers = await findActiveStakers();
+    } catch (e: any) {
+      console.log(`[decisions] Skipping proofwell scan: ${e.message}`);
+    }
+    for (const user of stakers) {
+      try {
         const stakes = await getActiveStakes(user);
         for (const stake of stakes) {
           if (isResolvable(stake)) {
             // Calculate forfeiture: if user didn't complete all days, 40% goes to treasury
             const failedDays = Number(stake.durationDays - stake.successfulDays);
             const forfeitRate = failedDays > 0 ? 0.4 : 0;
-            const stakeAmountUsdc = stake.isUSDC
-              ? Number(formatUnits(stake.amount, 6))
-              : Number(formatEther(stake.amount)); // ETH amount, not USD — rough estimate
-            const treasuryRevenue = stakeAmountUsdc * forfeitRate;
+            // Only track revenue for USDC stakes (ETH has no oracle, can't convert to USD)
+            const treasuryRevenue = stake.isUSDC
+              ? Number(formatUnits(stake.amount, 6)) * forfeitRate
+              : 0;
 
             decisions.push({
               action: "resolve_expired",
@@ -114,9 +119,9 @@ async function deterministicDecisions(): Promise<Decision[]> {
             });
           }
         }
+      } catch (e: any) {
+        console.log(`[decisions] Skipping stakes for ${user.slice(0, 10)}: ${e.message}`);
       }
-    } catch (e: any) {
-      console.log(`[decisions] Skipping proofwell scan: ${e.message}`);
     }
   }
 
@@ -192,6 +197,11 @@ Should you rebalance? Reply with JSON:
     };
 
     if (decision.action === "none") return null;
+
+    if (typeof decision.amount_usdc !== "number" || !isFinite(decision.amount_usdc) || decision.amount_usdc <= 0) {
+      console.log(`[llm] Invalid amount_usdc: ${decision.amount_usdc}`);
+      return null;
+    }
 
     const amountRaw = BigInt(Math.floor(decision.amount_usdc * 1_000_000));
 

@@ -19,13 +19,13 @@ export const chain = config.chain as Chain;
 
 export const publicClient: PublicClient = createPublicClient({
   chain,
-  transport: http(config.rpcUrl),
+  transport: http(config.rpcUrl, { timeout: 30_000 }),
 });
 
 export const walletClient: WalletClient = createWalletClient({
   account,
   chain,
-  transport: http(config.rpcUrl),
+  transport: http(config.rpcUrl, { timeout: 30_000 }),
 });
 
 export const agentAddress: Address = account.address;

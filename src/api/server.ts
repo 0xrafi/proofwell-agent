@@ -115,7 +115,7 @@ app.get("/api/pnl", (_req, res) => {
 // Action log
 app.get("/api/actions", (req, res) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 500);
     const actions = getRecentActions(limit);
     res.json({ actions });
   } catch (e: any) {

@@ -54,7 +54,7 @@ async function main() {
   await loop();
 
   // Then every N ms
-  setInterval(loop, config.loopIntervalMs);
+  setInterval(() => { loop().catch(e => console.error("[loop] Unhandled:", e)); }, config.loopIntervalMs);
 }
 
 main().catch((e) => {

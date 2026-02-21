@@ -1,6 +1,6 @@
 import { type Request, type Response } from "express";
 import { type Address, isAddress } from "viem";
-import { getActiveStakes, type StakeInfo } from "../actions/proofwell.js";
+import { getActiveStakes, SECONDS_PER_DAY, type StakeInfo } from "../actions/proofwell.js";
 import { logRevenue } from "../agent/state.js";
 import { config } from "../config.js";
 
@@ -81,7 +81,7 @@ function buildAttestation(wallet: Address, stakes: StakeInfo[]): Attestation {
     if (s.isUSDC) totalAmountUsdc += s.amount;
     else totalAmountEth += s.amount;
 
-    const stakeEnd = s.startTimestamp + s.durationDays * 86400n;
+    const stakeEnd = s.startTimestamp + s.durationDays * BigInt(SECONDS_PER_DAY);
     if (!s.claimed && now < stakeEnd) hasActive = true;
   }
 
