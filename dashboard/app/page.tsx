@@ -196,20 +196,48 @@ function Uptime({ status }: { status: Status | null }) {
   );
 }
 
+/** Downsample history to max N points using largest-triangle-three-buckets */
+function downsample(data: HistoryPoint[], maxPoints: number): HistoryPoint[] {
+  if (data.length <= maxPoints) return data;
+  const sampled: HistoryPoint[] = [data[0]];
+  const bucketSize = (data.length - 2) / (maxPoints - 2);
+  for (let i = 1; i < maxPoints - 1; i++) {
+    const start = Math.floor((i - 1) * bucketSize) + 1;
+    const end = Math.min(Math.floor(i * bucketSize) + 1, data.length - 1);
+    let maxDelta = -1, pick = start;
+    for (let j = start; j < end; j++) {
+      const delta = Math.abs(data[j].cumulative_revenue - (sampled[sampled.length - 1]?.cumulative_revenue ?? 0));
+      if (delta > maxDelta) { maxDelta = delta; pick = j; }
+    }
+    sampled.push(data[pick]);
+  }
+  sampled.push(data[data.length - 1]);
+  return sampled;
+}
+
 /** SVG chart of cumulative revenue vs costs over time */
 function FinancialChart({ history }: { history: HistoryPoint[] }) {
+  const [zoom, setZoom] = useState<"all" | "6h" | "1h">("all");
   const { width, height, padding } = { width: 600, height: 200, padding: { top: 20, right: 20, bottom: 30, left: 50 } };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  const { maxVal, points } = useMemo(() => {
-    if (history.length === 0) return { maxVal: 0.001, points: [] };
+  const { minRev, maxVal, points } = useMemo(() => {
+    if (history.length === 0) return { minRev: 0, maxVal: 0.001, points: [] };
+    const cutoff = zoom === "1h" ? Date.now() - 3600_000
+      : zoom === "6h" ? Date.now() - 21600_000 : 0;
+    const filtered = cutoff > 0
+      ? history.filter(h => new Date(h.timestamp + "Z").getTime() >= cutoff)
+      : history;
+    const pts = filtered.length < 2 ? history : filtered;
+    const sampled = downsample(pts, 120);
+    const minRev = zoom !== "all" ? Math.min(...sampled.map(h => Math.min(h.cumulative_revenue, h.cumulative_costs))) : 0;
     const maxVal = Math.max(
-      ...history.map((h) => Math.max(h.cumulative_revenue, h.cumulative_costs)),
-      0.001
+      ...sampled.map((h) => Math.max(h.cumulative_revenue, h.cumulative_costs)),
+      minRev + 0.001
     );
-    return { maxVal, points: history };
-  }, [history]);
+    return { minRev, maxVal, points: sampled };
+  }, [history, zoom]);
 
   if (points.length < 2) {
     return (
@@ -219,50 +247,65 @@ function FinancialChart({ history }: { history: HistoryPoint[] }) {
     );
   }
 
+  const range = (maxVal - minRev) * 1.1;
   const xScale = (i: number) => padding.left + (i / (points.length - 1)) * chartW;
-  const yScale = (v: number) => padding.top + chartH - (v / (maxVal * 1.1)) * chartH;
+  const yScale = (v: number) => padding.top + chartH - ((v - minRev) / range) * chartH;
 
   const revenueLine = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(p.cumulative_revenue)}`).join(" ");
   const costsLine = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(p.cumulative_costs)}`).join(" ");
 
   // Y-axis labels
-  const yLabels = [0, maxVal * 0.5, maxVal].map((v) => ({
+  const ySteps = [0, 0.5, 1].map(f => minRev + (maxVal - minRev) * f);
+  const yLabels = ySteps.map((v) => ({
     y: yScale(v),
-    label: `$${v.toFixed(v < 0.01 ? 4 : 2)}`,
+    label: `$${v.toFixed(v < 1 ? 4 : 2)}`,
   }));
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
-      {/* Grid lines */}
-      {yLabels.map((l, i) => (
-        <g key={i}>
-          <line x1={padding.left} y1={l.y} x2={width - padding.right} y2={l.y} stroke="var(--border)" strokeWidth="1" />
-          <text x={padding.left - 5} y={l.y + 4} textAnchor="end" fill="var(--text-dim)" fontSize="10" fontFamily="monospace">
-            {l.label}
-          </text>
+    <div>
+      <div className="flex gap-1 mb-2 justify-end">
+        {(["all", "6h", "1h"] as const).map(z => (
+          <button
+            key={z}
+            onClick={() => setZoom(z)}
+            className={`px-2 py-0.5 text-xs rounded ${zoom === z ? "bg-[var(--blue)] text-white" : "bg-[var(--border)] text-[var(--text-dim)]"}`}
+          >
+            {z === "all" ? "All" : z}
+          </button>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+        {/* Grid lines */}
+        {yLabels.map((l, i) => (
+          <g key={i}>
+            <line x1={padding.left} y1={l.y} x2={width - padding.right} y2={l.y} stroke="var(--border)" strokeWidth="1" />
+            <text x={padding.left - 5} y={l.y + 4} textAnchor="end" fill="var(--text-dim)" fontSize="10" fontFamily="monospace">
+              {l.label}
+            </text>
+          </g>
+        ))}
+
+        {/* Revenue line */}
+        <path d={revenueLine} fill="none" stroke="var(--green)" strokeWidth="2" />
+        {/* Costs line */}
+        <path d={costsLine} fill="none" stroke="var(--red)" strokeWidth="2" strokeDasharray="4 2" />
+
+        {/* Revenue fill */}
+        <path
+          d={`${revenueLine} L ${xScale(points.length - 1)} ${yScale(minRev)} L ${xScale(0)} ${yScale(minRev)} Z`}
+          fill="var(--green)"
+          opacity="0.1"
+        />
+
+        {/* Legend */}
+        <g transform={`translate(${padding.left + 10}, ${padding.top})`}>
+          <line x1="0" y1="0" x2="16" y2="0" stroke="var(--green)" strokeWidth="2" />
+          <text x="20" y="4" fill="var(--text-dim)" fontSize="10">Revenue</text>
+          <line x1="70" y1="0" x2="86" y2="0" stroke="var(--red)" strokeWidth="2" strokeDasharray="4 2" />
+          <text x="90" y="4" fill="var(--text-dim)" fontSize="10">Costs</text>
         </g>
-      ))}
-
-      {/* Revenue line */}
-      <path d={revenueLine} fill="none" stroke="var(--green)" strokeWidth="2" />
-      {/* Costs line */}
-      <path d={costsLine} fill="none" stroke="var(--red)" strokeWidth="2" strokeDasharray="4 2" />
-
-      {/* Revenue fill */}
-      <path
-        d={`${revenueLine} L ${xScale(points.length - 1)} ${yScale(0)} L ${xScale(0)} ${yScale(0)} Z`}
-        fill="var(--green)"
-        opacity="0.1"
-      />
-
-      {/* Legend */}
-      <g transform={`translate(${padding.left + 10}, ${padding.top})`}>
-        <line x1="0" y1="0" x2="16" y2="0" stroke="var(--green)" strokeWidth="2" />
-        <text x="20" y="4" fill="var(--text-dim)" fontSize="10">Revenue</text>
-        <line x1="70" y1="0" x2="86" y2="0" stroke="var(--red)" strokeWidth="2" strokeDasharray="4 2" />
-        <text x="90" y="4" fill="var(--text-dim)" fontSize="10">Costs</text>
-      </g>
-    </svg>
+      </svg>
+    </div>
   );
 }
 
