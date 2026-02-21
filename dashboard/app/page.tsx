@@ -231,9 +231,12 @@ function FinancialChart({ history }: { history: HistoryPoint[] }) {
       : history;
     const pts = filtered.length < 2 ? history : filtered;
     const sampled = downsample(pts, 120);
-    const minRev = zoom !== "all" ? Math.min(...sampled.map(h => Math.min(h.cumulative_revenue, h.cumulative_costs))) : 0;
+    // For zoomed views, scale Y-axis tightly around revenue so growth is visible
+    const minRev = zoom !== "all"
+      ? Math.min(...sampled.map(h => h.cumulative_revenue)) * 0.9995
+      : 0;
     const maxVal = Math.max(
-      ...sampled.map((h) => Math.max(h.cumulative_revenue, h.cumulative_costs)),
+      ...sampled.map((h) => h.cumulative_revenue),
       minRev + 0.001
     );
     return { minRev, maxVal, points: sampled };
