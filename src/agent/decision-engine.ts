@@ -90,10 +90,13 @@ async function deterministicDecisions(): Promise<Decision[]> {
   if (config.proofwellContract !== "0x0000000000000000000000000000000000000000") {
     try {
       const stakers = await findActiveStakers();
+      console.log(`[decisions] Found ${stakers.length} stakers to scan`);
       for (const user of stakers) {
         const stakes = await getActiveStakes(user);
         for (const stake of stakes) {
-          if (isResolvable(stake)) {
+          const resolvable = isResolvable(stake);
+          console.log(`[decisions] ${user.slice(0, 10)}[${stake.stakeId}] amount=${stake.amount} claimed=${stake.claimed} resolvable=${resolvable}`);
+          if (resolvable) {
             // Calculate forfeiture: if user didn't complete all days, 40% goes to treasury
             const failedDays = Number(stake.durationDays - stake.successfulDays);
             const forfeitRate = failedDays > 0 ? 0.4 : 0;
