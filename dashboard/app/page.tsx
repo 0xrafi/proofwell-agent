@@ -64,7 +64,10 @@ function useFetch<T>(path: string, interval = 15000) {
   useEffect(() => {
     const load = () =>
       fetch(`${API}${path}`)
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error(`API error (${r.status})`);
+          return r.json();
+        })
         .then((d) => {
           setData(d);
           setLoading(false);
@@ -581,7 +584,11 @@ export default function Dashboard() {
                       </a>
                     )}
                   </div>
-                  <div className="text-[var(--text-dim)]">{a.description}</div>
+                  <div className="text-[var(--text-dim)]">
+                    {!a.success && a.description.length > 120
+                      ? a.description.slice(0, 120) + "..."
+                      : a.description}
+                  </div>
                 </div>
                 {a.amount_usdc > 0 && (
                   <span className="font-mono text-[var(--green)] flex-shrink-0">${a.amount_usdc.toFixed(4)}</span>

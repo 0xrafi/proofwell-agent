@@ -237,6 +237,17 @@ Should you rebalance? Reply with JSON:
   return null;
 }
 
+/** Extract a clean error summary from viem or other errors */
+function sanitizeError(e: any): string {
+  // viem provides a short summary
+  if (e.shortMessage) return e.shortMessage.slice(0, 120);
+  const msg: string = e.message ?? String(e);
+  // Extract the "Details:" line from viem verbose errors
+  const details = msg.match(/Details:\s*(.+)/);
+  if (details) return details[1].slice(0, 120);
+  return msg.slice(0, 120);
+}
+
 /** Run one decision cycle */
 export async function runDecisionCycle(): Promise<string[]> {
   const executed: string[] = [];
@@ -250,7 +261,7 @@ export async function runDecisionCycle(): Promise<string[]> {
       executed.push(`${d.action}: ${d.reason}`);
     } catch (e: any) {
       console.error(`[decide] Failed ${d.action}: ${e.message}`);
-      logAction(d.action, `FAILED: ${e.message}`, undefined, 0, 0, false);
+      logAction(d.action, `FAILED: ${sanitizeError(e)}`, undefined, 0, 0, false);
     }
   }
 
@@ -263,7 +274,7 @@ export async function runDecisionCycle(): Promise<string[]> {
       executed.push(`${llm.action}: ${llm.reason}`);
     } catch (e: any) {
       console.error(`[decide] Failed ${llm.action}: ${e.message}`);
-      logAction(llm.action, `FAILED: ${e.message}`, undefined, 0, 0, false);
+      logAction(llm.action, `FAILED: ${sanitizeError(e)}`, undefined, 0, 0, false);
     }
   }
 

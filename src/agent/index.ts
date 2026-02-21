@@ -21,13 +21,20 @@ async function printStatus() {
   console.log(`=====================================\n`);
 }
 
+let cycleRunning = false;
+
 async function loop() {
-  const cycleNum = parseInt(getState("cycle_count") ?? "0") + 1;
-  setState("cycle_count", String(cycleNum));
-
-  console.log(`\n--- Cycle #${cycleNum} @ ${new Date().toISOString()} ---`);
-
+  if (cycleRunning) {
+    console.log("[loop] Previous cycle still running, skipping");
+    return;
+  }
+  cycleRunning = true;
   try {
+    const cycleNum = parseInt(getState("cycle_count") ?? "0") + 1;
+    setState("cycle_count", String(cycleNum));
+
+    console.log(`\n--- Cycle #${cycleNum} @ ${new Date().toISOString()} ---`);
+
     const actions = await runDecisionCycle();
     setState("last_cycle", new Date().toISOString());
     setState("last_cycle_actions", String(actions.length));
@@ -37,6 +44,8 @@ async function loop() {
   } catch (e: any) {
     console.error(`[loop] Cycle failed: ${e.message}`);
     logAction("cycle_error", e.message, undefined, 0, 0, false);
+  } finally {
+    cycleRunning = false;
   }
 }
 
