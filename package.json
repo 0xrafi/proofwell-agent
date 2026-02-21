@@ -18,6 +18,9 @@
     "dotenv": "^16.4.7",
     "openai": "^4.77.0"
   },
+  "engines": {
+    "node": "20"
+  },
   "devDependencies": {
     "typescript": "^5.7.0",
     "tsx": "^4.19.0",
