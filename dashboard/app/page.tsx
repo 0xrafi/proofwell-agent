@@ -313,6 +313,76 @@ const ACTION_COLORS: Record<string, string> = {
   cycle_error: "bg-[var(--red)]",
 };
 
+function AttestationDemo({ apiBase }: { apiBase: string }) {
+  const [wallet, setWallet] = useState("0xc59e6289F42b8228DF2E8c88Bb33442e8B91B7d8");
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const query = async () => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(`${apiBase}/v1/attestation/${wallet}`);
+      const data = await res.json();
+      setResult(data);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card title="x402 Behavioral Attestation — Live Demo" className="mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div className="text-sm text-[var(--text-dim)] mb-3">
+            Novel revenue stream: other DeFi protocols pay to query{" "}
+            <span className="text-[var(--text)] font-medium">&ldquo;Is this wallet holder disciplined?&rdquo;</span>
+          </div>
+          <div className="text-xs text-[var(--text-dim)] space-y-1 mb-3">
+            <div>Use cases: undercollateralized lending, insurance pricing, reputation</div>
+            <div>Price: 0.01 USDC/query via x402 payment protocol</div>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={wallet}
+              onChange={(e) => setWallet(e.target.value)}
+              placeholder="0x..."
+              className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-1.5 font-mono text-xs text-[var(--text)]"
+            />
+            <button
+              onClick={query}
+              disabled={loading}
+              className="px-3 py-1.5 bg-[var(--blue)] text-white rounded text-xs font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? "..." : "Query"}
+            </button>
+          </div>
+        </div>
+        <div className="bg-[var(--bg)] rounded-md p-3 font-mono text-xs overflow-x-auto">
+          <div className="mb-1">
+            <span className="text-[var(--green)]">GET</span>{" "}
+            <span className="text-[var(--blue)]">/v1/attestation/{wallet.slice(0, 10)}...</span>
+          </div>
+          {error && <div className="text-[var(--red)]">Error: {error}</div>}
+          {result && (
+            <pre className="text-[var(--text-dim)] whitespace-pre">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          )}
+          {!result && !error && (
+            <div className="text-[var(--text-dim)]">Click &ldquo;Query&rdquo; to fetch live attestation data</div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { data: status, loading: statusLoading } = useFetch<Status>("/api/status");
   const { data: balances, loading: balancesLoading } = useFetch<Balances>("/api/balances");
@@ -368,6 +438,9 @@ export default function Dashboard() {
         <Uptime status={status} />
       </div>
 
+      {/* How It Works — above the fold */}
+      <HowItWorks />
+
       {/* Self-sustaining score — the hero metric */}
       <Card title="Self-Sustaining Score" className="mb-6">
         <SustainabilityGauge score={pnl ? pnl.ratio : 0} pnl={pnl} loading={pnlLoading} />
@@ -377,9 +450,6 @@ export default function Dashboard() {
       <Card title="Revenue vs Costs Over Time" className="mb-6">
         <FinancialChart history={historyData?.history ?? []} />
       </Card>
-
-      {/* How It Works */}
-      <HowItWorks />
 
       {/* Balance + Revenue + Costs row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -440,34 +510,43 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* x402 Attestation panel */}
-      <Card title="x402 Behavioral Attestation" className="mb-6">
+      {/* Builder Code (ERC-8021) */}
+      <Card title="On-Chain Builder Attribution (ERC-8021)" className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <div className="text-sm text-[var(--text-dim)] mb-3">
-              Novel revenue stream: other DeFi protocols pay to query{" "}
-              <span className="text-[var(--text)] font-medium">"Is this wallet holder disciplined?"</span>
+              Every transaction the agent sends includes a builder code in calldata, making it
+              verifiable on-chain that this agent built the transaction.
             </div>
-            <div className="text-xs text-[var(--text-dim)] space-y-1">
-              <div>Use cases: undercollateralized lending, insurance pricing, reputation</div>
-              <div>Price: 0.01 USDC/query via x402 payment protocol</div>
+            <div className="text-xs space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--text-dim)]">Builder code:</span>
+                <span className="font-mono text-[var(--text)] font-medium bg-[var(--bg)] px-2 py-0.5 rounded">proofwell</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--text-dim)]">Suffix:</span>
+                <span className="font-mono text-[var(--blue)]">70726f6f6677656c6c</span>
+              </div>
             </div>
           </div>
-          <div className="bg-[var(--bg)] rounded-md p-3 font-mono text-xs overflow-x-auto">
-            <div className="mb-1">
-              <span className="text-[var(--green)]">GET</span>{" "}
-              <span className="text-[var(--blue)]">/v1/attestation/0xABC...</span>
+          <div className="flex flex-col gap-2 text-xs">
+            <a
+              href={`${explorerUrl}/address/${status?.agent}`}
+              target="_blank"
+              className="text-[var(--blue)] hover:underline"
+            >
+              View all agent transactions on BaseScan &rarr;
+            </a>
+            <div className="text-[var(--text-dim)]">
+              Look at any tx input data — it ends with <span className="font-mono">70726f6f6677656c6c</span> ("proofwell" in hex).
+              This proves the agent authored the transaction per the ERC-8021 builder code standard.
             </div>
-            <div className="text-[var(--text-dim)] whitespace-pre">{`{
-  "disciplineScore": 85,
-  "totalStakes": 3,
-  "successRate": 0.67,
-  "isActive": true,
-  "source": "proofwell"
-}`}</div>
           </div>
         </div>
       </Card>
+
+      {/* x402 Attestation panel — live demo */}
+      <AttestationDemo apiBase={API} />
 
       {/* Action log */}
       <Card title={`Action Log (${actions.length} events)`}>

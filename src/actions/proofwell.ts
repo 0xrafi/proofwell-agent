@@ -144,8 +144,25 @@ const stakeEvents = [
   },
 ] as const;
 
-const SECONDS_PER_DAY = 86400;
-const RESOLUTION_BUFFER = 7 * SECONDS_PER_DAY;
+const SECONDS_PER_DAY = 300;       // matches contract demo constants
+const RESOLUTION_BUFFER = 0;       // matches contract demo constants
+
+const KNOWN_STAKERS: Address[] = [
+  "0xc59e6289F42b8228DF2E8c88Bb33442e8B91B7d8",
+  "0x9B0382a220Ba69FD4464d96B1d1925d982e05791",
+  "0x997e69b16ddaD2BECF7e4CB98B5899d9a3Bb18E8",
+  "0xdB2517c475E160254c8af290BCeCaCbdd614AbeA",
+  "0x50168133548836cb6B9dA964feeCa49C9Fe412A6",
+  "0x08DF2e88f7db895642cAdB03CF3A0195223b6f95",
+  "0x0937Fe3867cB9363DB530754d0A34812656719Cc",
+  "0xF36bD547Ac77646AE6ba98c216E61d8A4d3120C8",
+  "0x3e2F5265a29Cf88cb3619283026A53555cDc29fa",
+  "0xd1454493d747B6fE6bF49c2a64cEb68d8259145A",
+  "0xAc4006412d33693Cb690ecDa5a4253583cdC40F1",
+  "0x385DBB4a23af0bF6d26a35f9B273716B78a0D143",
+  "0xAa067a1821b466488827f60F3Cfd6822144120c0",
+  "0x4e45B7a1D403E2d09b757c3FB909BA2cBCD59cF5",
+];
 
 export interface StakeInfo {
   user: Address;
@@ -290,7 +307,7 @@ export async function findActiveStakers(fromBlock?: bigint): Promise<Address[]> 
     }),
   ]);
 
-  const users = new Set<Address>();
+  const users = new Set<Address>(KNOWN_STAKERS);
   for (const e of [...ethEvents, ...usdcEvents]) {
     if (e.args.user) users.add(e.args.user);
   }

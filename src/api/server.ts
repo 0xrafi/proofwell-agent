@@ -29,8 +29,6 @@ app.get("/health", (_req, res) => {
 // Agent status
 app.get("/api/status", async (_req, res) => {
   try {
-    const balances = await getBalances();
-    const aavePosition = await getAavePosition();
     const totalRevenue = getTotalRevenue();
     const totalCosts = getTotalCosts();
     const pnl = totalRevenue - totalCosts;
