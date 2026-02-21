@@ -314,7 +314,7 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 function AttestationDemo({ apiBase }: { apiBase: string }) {
-  const [wallet, setWallet] = useState("0xc59e6289F42b8228DF2E8c88Bb33442e8B91B7d8");
+  const [wallet, setWallet] = useState("0xc59E6289C3f53009B9fFB7B1d3D9Be9F7aA0e472");
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
