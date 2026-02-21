@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { config } from "../config.js";
 import { agentAddress, getBalances } from "../agent/wallet.js";
 import { getAavePosition } from "../actions/aave.js";
@@ -18,6 +19,24 @@ import { formatUnits, formatEther } from "viem";
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const attestationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, try again later" },
+});
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, try again later" },
+});
+
+app.use(globalLimiter);
 
 const startedAt = new Date().toISOString();
 
@@ -50,7 +69,8 @@ app.get("/api/status", async (_req, res) => {
       selfSustainingScore: totalCosts > 0 ? (totalRevenue / totalCosts) : 0,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error(`[api] Error:`, e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -69,7 +89,8 @@ app.get("/api/balances", async (_req, res) => {
       aavePercent: totalUsdc > 0n ? Number((aavePosition * 100n) / totalUsdc) : 0,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error(`[api] Error:`, e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -80,7 +101,8 @@ app.get("/api/revenue", (_req, res) => {
     const bySource = getRevenueBySource();
     res.json({ total, bySource });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error(`[api] Error:`, e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -91,7 +113,8 @@ app.get("/api/costs", (_req, res) => {
     const byCategory = getCostsByCategory();
     res.json({ total, byCategory });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error(`[api] Error:`, e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -108,7 +131,8 @@ app.get("/api/pnl", (_req, res) => {
       ratio: costs > 0 ? revenue / costs : 0,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error(`[api] Error:`, e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -119,7 +143,8 @@ app.get("/api/actions", (req, res) => {
     const actions = getRecentActions(limit);
     res.json({ actions });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error(`[api] Error:`, e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -129,12 +154,19 @@ app.get("/api/history", (_req, res) => {
     const history = getFinancialHistory();
     res.json({ history });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error(`[api] Error:`, e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // x402 attestation (paid endpoint)
-app.get("/v1/attestation/:wallet", attestationHandler);
+app.get("/v1/attestation/:wallet", attestationLimiter, attestationHandler);
+
+// Global error handler — catch anything that slips through
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[api] Unhandled error:", err.message);
+  res.status(500).json({ error: "Internal server error" });
+});
 
 export function startApiServer() {
   app.listen(config.port, () => {

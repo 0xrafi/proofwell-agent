@@ -43,8 +43,8 @@ export async function attestationHandler(req: Request, res: Response) {
 
     res.json(attestation);
   } catch (e: any) {
-    // If contract not deployed or no stake, return empty attestation
-    res.json(buildEmptyAttestation(wallet));
+    console.error(`[attestation] RPC error for ${wallet}:`, e.message);
+    res.status(503).json({ error: "Attestation service temporarily unavailable" });
   }
 }
 
@@ -85,7 +85,7 @@ function buildAttestation(wallet: Address, stakes: StakeInfo[]): Attestation {
     if (!s.claimed && now < stakeEnd) hasActive = true;
   }
 
-  const successRate = totalDuration > 0 ? totalSuccessful / totalDuration : 0;
+  const successRate = totalDuration > 0 ? Math.min(totalSuccessful / totalDuration, 1) : 0;
   const durationWeight = Math.min(totalDuration / 30, 1);
   const disciplineScore = Math.round(successRate * 100 * (0.5 + 0.5 * durationWeight));
 

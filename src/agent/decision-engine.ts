@@ -33,8 +33,8 @@ async function gatherState() {
   try {
     currentWeek = await getCurrentWeek();
     cohort = await getCohortInfo(currentWeek);
-  } catch {
-    // Contract may not be deployed yet
+  } catch (e: any) {
+    console.log('[state] Contract read failed:', e.message);
   }
 
   return { balances, aavePosition, currentWeek, cohort };

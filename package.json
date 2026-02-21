@@ -11,22 +11,23 @@
     "dashboard": "cd dashboard && next dev"
   },
   "dependencies": {
-    "viem": "^2.21.0",
     "better-sqlite3": "^11.7.0",
-    "express": "^4.21.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "openai": "^4.77.0"
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.2.1",
+    "openai": "^4.77.0",
+    "viem": "^2.21.0"
   },
   "engines": {
     "node": "20"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "tsx": "^4.19.0",
-    "@types/node": "^22.10.0",
-    "@types/express": "^5.0.0",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
-    "@types/better-sqlite3": "^7.6.12"
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   }
 }
