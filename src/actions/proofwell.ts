@@ -209,8 +209,14 @@ export async function getStake(user: Address, stakeId: bigint): Promise<StakeInf
   };
 }
 
-/** Get all active stakes for a user */
+/** Get all active (unclaimed) stakes for a user */
 export async function getActiveStakes(user: Address): Promise<StakeInfo[]> {
+  const all = await getAllStakes(user);
+  return all.filter(s => !s.claimed);
+}
+
+/** Get all stakes for a user (including claimed/resolved) */
+export async function getAllStakes(user: Address): Promise<StakeInfo[]> {
   const nextId = await publicClient.readContract({
     address: config.proofwellContract,
     abi: proofwellAbi,
@@ -224,7 +230,7 @@ export async function getActiveStakes(user: Address): Promise<StakeInfo[]> {
     stakePromises.push(getStake(user, i));
   }
   const allStakes = await Promise.all(stakePromises);
-  return allStakes.filter(s => s.amount > 0n && !s.claimed);
+  return allStakes.filter(s => s.amount > 0n);
 }
 
 /** Get treasury address from contract */

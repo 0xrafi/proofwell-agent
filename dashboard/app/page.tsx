@@ -435,7 +435,7 @@ export default function Dashboard() {
   const { data: pnl, loading: pnlLoading } = useFetch<PnL>("/api/pnl");
   const { data: revenue } = useFetch<Revenue>("/api/revenue");
   const { data: costs } = useFetch<Costs>("/api/costs");
-  const { data: actionsData, loading: actionsLoading } = useFetch<{ actions: Action[] }>("/api/actions");
+  const { data: actionsData, loading: actionsLoading } = useFetch<{ actions: Action[] }>("/api/actions?limit=200");
   const { data: historyData } = useFetch<{ history: HistoryPoint[] }>("/api/history", 30000);
 
   const actions = actionsData?.actions ?? [];

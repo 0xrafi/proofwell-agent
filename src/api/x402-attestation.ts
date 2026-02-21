@@ -1,6 +1,6 @@
 import { type Request, type Response } from "express";
 import { type Address, isAddress } from "viem";
-import { getActiveStakes, SECONDS_PER_DAY, type StakeInfo } from "../actions/proofwell.js";
+import { getAllStakes, SECONDS_PER_DAY, type StakeInfo } from "../actions/proofwell.js";
 import { logRevenue } from "../agent/state.js";
 import { config } from "../config.js";
 
@@ -26,7 +26,7 @@ export async function attestationHandler(req: Request, res: Response) {
   }
 
   try {
-    const stakes = await getActiveStakes(wallet);
+    const stakes = await getAllStakes(wallet);
     const attestation = buildAttestation(wallet, stakes);
 
     // Check for x402 payment receipt in header
