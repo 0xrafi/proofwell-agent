@@ -9,6 +9,7 @@ import {
   getRecentActions,
   getRevenueBySource,
   getCostsByCategory,
+  getFinancialHistory,
   getState,
 } from "../agent/state.js";
 import { attestationHandler } from "./x402-attestation.js";
@@ -17,6 +18,8 @@ import { formatUnits, formatEther } from "viem";
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const startedAt = new Date().toISOString();
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -42,6 +45,7 @@ app.get("/api/status", async (_req, res) => {
       uptime: {
         cycleCount: parseInt(cycleCount),
         lastCycle,
+        startedAt,
         loopIntervalMs: config.loopIntervalMs,
       },
       selfSustaining: pnl > 0,
@@ -116,6 +120,16 @@ app.get("/api/actions", (req, res) => {
     const limit = parseInt(req.query.limit as string) || 50;
     const actions = getRecentActions(limit);
     res.json({ actions });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Financial history for charts
+app.get("/api/history", (_req, res) => {
+  try {
+    const history = getFinancialHistory();
+    res.json({ history });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

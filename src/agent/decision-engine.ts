@@ -14,6 +14,11 @@ import {
 import { logAction, logRevenue, logCost, getState, setState } from "./state.js";
 import OpenAI from "openai";
 
+// Estimated per-cycle compute cost (Railway $5/mo ≈ $0.007/hr, 12 cycles/hr ≈ $0.0006/cycle)
+const COMPUTE_COST_PER_CYCLE = 0.0006;
+// Estimated gas cost per tx in USD (Base L2, ~$0.001-0.01)
+const GAS_COST_ESTIMATE_USD = 0.005;
+
 interface Decision {
   action: string;
   reason: string;
@@ -43,6 +48,22 @@ async function deterministicDecisions(): Promise<Decision[]> {
   const state = await gatherState();
   const { balances } = state;
 
+  // Rule 0: Track Aave yield as revenue
+  const aavePosition = state.aavePosition;
+  const lastAavePosition = getState("last_aave_position");
+  if (lastAavePosition) {
+    const prev = BigInt(lastAavePosition);
+    if (aavePosition > prev) {
+      const yieldDelta = aavePosition - prev;
+      const yieldUsdc = Number(formatUnits(yieldDelta, 6));
+      if (yieldUsdc > 0.000001) {
+        logRevenue("aave_yield", yieldUsdc, undefined, `Aave V3 interest accrued: ${formatUnits(yieldDelta, 6)} USDC`);
+        logAction("aave_yield", `Earned ${formatUnits(yieldDelta, 6)} USDC yield from Aave V3`, undefined, yieldUsdc);
+      }
+    }
+  }
+  setState("last_aave_position", aavePosition.toString());
+
   // Rule 1: Idle Aave USDC above threshold → deposit to Aave
   // On testnet, Aave uses a different USDC than Proofwell. Use aaveUsdc balance.
   const aaveUsdcBalance = balances.aaveUsdc;
@@ -54,6 +75,7 @@ async function deterministicDecisions(): Promise<Decision[]> {
       execute: async () => {
         const hash = await supplyUsdc(depositAmount);
         logAction("aave_supply", `Deposited ${formatUnits(depositAmount, 6)} USDC to Aave`, hash, Number(formatUnits(depositAmount, 6)));
+        logCost("gas", GAS_COST_ESTIMATE_USD, "Aave supply tx gas");
       },
     });
   }
@@ -66,13 +88,24 @@ async function deterministicDecisions(): Promise<Decision[]> {
         const stakes = await getActiveStakes(user);
         for (const stake of stakes) {
           if (isResolvable(stake)) {
+            // Calculate forfeiture: if user didn't complete all days, 40% goes to treasury
+            const failedDays = Number(stake.durationDays - stake.successfulDays);
+            const forfeitRate = failedDays > 0 ? 0.4 : 0;
+            const stakeAmountUsdc = stake.isUSDC
+              ? Number(formatUnits(stake.amount, 6))
+              : Number(formatEther(stake.amount)); // ETH amount, not USD — rough estimate
+            const treasuryRevenue = stakeAmountUsdc * forfeitRate;
+
             decisions.push({
               action: "resolve_expired",
-              reason: `Stake ${formatStake(stake)} is expired + past buffer → resolving for treasury`,
+              reason: `Stake ${formatStake(stake)} is expired + past buffer → resolving (${failedDays} failed days, ~$${treasuryRevenue.toFixed(4)} to treasury)`,
               execute: async () => {
                 const hash = await resolveExpired(user, stake.stakeId);
-                logAction("resolve_expired", `Resolved expired stake for ${user}[${stake.stakeId}]`, hash);
-                logRevenue("treasury_slash", 0, hash, `Resolved ${user}[${stake.stakeId}]`);
+                logAction("resolve_expired", `Resolved expired stake for ${user}[${stake.stakeId}] — ${failedDays} failed days`, hash, treasuryRevenue);
+                if (treasuryRevenue > 0) {
+                  logRevenue("treasury_slash", treasuryRevenue, hash, `40% forfeiture from ${user.slice(0, 10)}[${stake.stakeId}]`);
+                }
+                logCost("gas", GAS_COST_ESTIMATE_USD, "resolveExpiredV3 tx gas");
               },
             });
           }

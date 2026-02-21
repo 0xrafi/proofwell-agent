@@ -1,7 +1,10 @@
 import Database from "better-sqlite3";
 import path from "path";
+import fs from "fs";
 
-const DB_PATH = path.join(process.cwd(), "agent.db");
+// Use /data on Railway (persistent volume), fallback to cwd locally
+const DATA_DIR = fs.existsSync("/data") ? "/data" : process.cwd();
+const DB_PATH = path.join(DATA_DIR, "agent.db");
 
 let db: Database.Database;
 
@@ -132,4 +135,27 @@ export function getCostsByCategory(): Array<{ category: string; total: number }>
   return getDb()
     .prepare(`SELECT category, SUM(amount_usdc) as total FROM costs GROUP BY category ORDER BY total DESC`)
     .all() as any;
+}
+
+/** Cumulative revenue + cost snapshots over time for charts */
+export function getFinancialHistory(): Array<{
+  timestamp: string;
+  cumulative_revenue: number;
+  cumulative_costs: number;
+}> {
+  // Combine revenue and cost events, ordered by time, with running totals
+  const rows = getDb().prepare(`
+    WITH events AS (
+      SELECT timestamp, amount_usdc as revenue, 0 as cost FROM revenue
+      UNION ALL
+      SELECT timestamp, 0 as revenue, amount_usdc as cost FROM costs
+    )
+    SELECT
+      timestamp,
+      SUM(revenue) OVER (ORDER BY timestamp ROWS UNBOUNDED PRECEDING) as cumulative_revenue,
+      SUM(cost) OVER (ORDER BY timestamp ROWS UNBOUNDED PRECEDING) as cumulative_costs
+    FROM events
+    ORDER BY timestamp
+  `).all() as any;
+  return rows;
 }

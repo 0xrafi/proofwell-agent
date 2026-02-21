@@ -1,8 +1,11 @@
 import { config } from "../config.js";
 import { agentAddress, getBalances } from "./wallet.js";
 import { runDecisionCycle } from "./decision-engine.js";
-import { logAction, getState, setState } from "./state.js";
+import { logAction, logCost, getState, setState } from "./state.js";
 import { startApiServer } from "../api/server.js";
+
+// Railway $5/mo ≈ $0.007/hr, 12 cycles/hr
+const COMPUTE_COST_PER_CYCLE = 0.0006;
 
 async function printStatus() {
   const balances = await getBalances();
@@ -28,6 +31,9 @@ async function loop() {
     const actions = await runDecisionCycle();
     setState("last_cycle", new Date().toISOString());
     setState("last_cycle_actions", String(actions.length));
+
+    // Log compute cost every cycle
+    logCost("compute", COMPUTE_COST_PER_CYCLE, `Cycle #${cycleNum} compute (Railway)`);
   } catch (e: any) {
     console.error(`[loop] Cycle failed: ${e.message}`);
     logAction("cycle_error", e.message, undefined, 0, 0, false);

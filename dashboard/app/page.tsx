@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -25,7 +25,7 @@ interface Status {
   network: string;
   explorerUrl: string;
   proofwellContract: string;
-  uptime: { cycleCount: number; lastCycle: string; loopIntervalMs: number };
+  uptime: { cycleCount: number; lastCycle: string; startedAt?: string; loopIntervalMs: number };
   selfSustaining: boolean;
   selfSustainingScore: number;
 }
@@ -48,6 +48,12 @@ interface Revenue {
 interface Costs {
   total: number;
   byCategory: Array<{ category: string; total: number }>;
+}
+
+interface HistoryPoint {
+  timestamp: string;
+  cumulative_revenue: number;
+  cumulative_costs: number;
 }
 
 function useFetch<T>(path: string, interval = 15000) {
@@ -121,22 +127,139 @@ function NetworkBadge({ network }: { network: string }) {
   );
 }
 
-function SustainabilityGauge({ score, loading }: { score: number; loading?: boolean }) {
-  if (loading) return <Skeleton className="h-3 w-full" />;
+function SustainabilityGauge({ score, pnl, loading }: { score: number; pnl: PnL | null; loading?: boolean }) {
+  if (loading) return <Skeleton className="h-20 w-full" />;
   const pct = Math.min(score * 100, 200);
   const color = score >= 1 ? "var(--green)" : score > 0.5 ? "var(--yellow)" : "var(--red)";
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1 h-3 rounded-full bg-[var(--border)] overflow-hidden">
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-baseline gap-3">
+          <span className="text-4xl font-mono font-bold" style={{ color }}>
+            {score >= 1 ? `${score.toFixed(1)}x` : `${(score * 100).toFixed(0)}%`}
+          </span>
+          <span className="text-sm text-[var(--text-dim)]">
+            {score >= 1 ? "Self-sustaining" : score > 0 ? "Building toward sustainability" : "Tracking costs"}
+          </span>
+        </div>
+        {pnl && (
+          <span className="text-2xl font-mono font-bold" style={{ color: pnl.profit >= 0 ? "var(--green)" : "var(--red)" }}>
+            {pnl.profit >= 0 ? "+" : ""}${pnl.profit.toFixed(4)}
+          </span>
+        )}
+      </div>
+      <div className="h-3 rounded-full bg-[var(--border)] overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-1000"
           style={{ width: `${Math.min(pct, 100)}%`, background: color }}
         />
       </div>
-      <span className="font-mono text-sm" style={{ color }}>
-        {score >= 1 ? `${score.toFixed(1)}x` : `${(score * 100).toFixed(0)}%`}
-      </span>
+      <div className="flex justify-between mt-1 text-xs text-[var(--text-dim)]">
+        <span>Revenue: ${pnl?.revenue.toFixed(4) ?? "0"}</span>
+        <span>Costs: ${pnl?.costs.toFixed(4) ?? "0"}</span>
+      </div>
     </div>
+  );
+}
+
+function Uptime({ status }: { status: Status | null }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!status) return null;
+
+  const startedAt = status.uptime.startedAt;
+  const uptimeMs = startedAt ? now - new Date(startedAt).getTime() : 0;
+  const hours = Math.floor(uptimeMs / 3600000);
+  const mins = Math.floor((uptimeMs % 3600000) / 60000);
+  const secs = Math.floor((uptimeMs % 60000) / 1000);
+  const uptimeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m ${secs}s`;
+
+  const lastCycleAgo = status.uptime.lastCycle !== "never"
+    ? Math.floor((now - new Date(status.uptime.lastCycle).getTime()) / 1000)
+    : null;
+
+  return (
+    <div className="flex items-center gap-4 text-xs text-[var(--text-dim)]">
+      <span>Uptime: {uptimeStr}</span>
+      <span>Cycles: {status.uptime.cycleCount}</span>
+      {lastCycleAgo !== null && <span>Last cycle: {lastCycleAgo}s ago</span>}
+      <span>Interval: {status.uptime.loopIntervalMs / 1000}s</span>
+    </div>
+  );
+}
+
+/** SVG chart of cumulative revenue vs costs over time */
+function FinancialChart({ history }: { history: HistoryPoint[] }) {
+  const { width, height, padding } = { width: 600, height: 200, padding: { top: 20, right: 20, bottom: 30, left: 50 } };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+
+  const { maxVal, points } = useMemo(() => {
+    if (history.length === 0) return { maxVal: 0.001, points: [] };
+    const maxVal = Math.max(
+      ...history.map((h) => Math.max(h.cumulative_revenue, h.cumulative_costs)),
+      0.001
+    );
+    return { maxVal, points: history };
+  }, [history]);
+
+  if (points.length < 2) {
+    return (
+      <div className="h-[200px] flex items-center justify-center text-sm text-[var(--text-dim)]">
+        Chart populates as revenue and cost events accumulate
+      </div>
+    );
+  }
+
+  const xScale = (i: number) => padding.left + (i / (points.length - 1)) * chartW;
+  const yScale = (v: number) => padding.top + chartH - (v / (maxVal * 1.1)) * chartH;
+
+  const revenueLine = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(p.cumulative_revenue)}`).join(" ");
+  const costsLine = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(p.cumulative_costs)}`).join(" ");
+
+  // Y-axis labels
+  const yLabels = [0, maxVal * 0.5, maxVal].map((v) => ({
+    y: yScale(v),
+    label: `$${v.toFixed(v < 0.01 ? 4 : 2)}`,
+  }));
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+      {/* Grid lines */}
+      {yLabels.map((l, i) => (
+        <g key={i}>
+          <line x1={padding.left} y1={l.y} x2={width - padding.right} y2={l.y} stroke="var(--border)" strokeWidth="1" />
+          <text x={padding.left - 5} y={l.y + 4} textAnchor="end" fill="var(--text-dim)" fontSize="10" fontFamily="monospace">
+            {l.label}
+          </text>
+        </g>
+      ))}
+
+      {/* Revenue line */}
+      <path d={revenueLine} fill="none" stroke="var(--green)" strokeWidth="2" />
+      {/* Costs line */}
+      <path d={costsLine} fill="none" stroke="var(--red)" strokeWidth="2" strokeDasharray="4 2" />
+
+      {/* Revenue fill */}
+      <path
+        d={`${revenueLine} L ${xScale(points.length - 1)} ${yScale(0)} L ${xScale(0)} ${yScale(0)} Z`}
+        fill="var(--green)"
+        opacity="0.1"
+      />
+
+      {/* Legend */}
+      <g transform={`translate(${padding.left + 10}, ${padding.top})`}>
+        <line x1="0" y1="0" x2="16" y2="0" stroke="var(--green)" strokeWidth="2" />
+        <text x="20" y="4" fill="var(--text-dim)" fontSize="10">Revenue</text>
+        <line x1="70" y1="0" x2="86" y2="0" stroke="var(--red)" strokeWidth="2" strokeDasharray="4 2" />
+        <text x="90" y="4" fill="var(--text-dim)" fontSize="10">Costs</text>
+      </g>
+    </svg>
   );
 }
 
@@ -167,6 +290,29 @@ function HowItWorks() {
   );
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  treasury_slash: "Forfeitures",
+  aave_yield: "Aave Yield",
+  x402_attestation: "x402 Queries",
+};
+
+const COST_LABELS: Record<string, string> = {
+  compute: "Compute (Railway)",
+  gas: "Gas (Base L2)",
+  llm: "LLM (GPT-4o-mini)",
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  startup: "bg-[var(--blue)]",
+  aave_supply: "bg-[var(--green)]",
+  aave_yield: "bg-[var(--green)]",
+  llm_deposit: "bg-[var(--green)]",
+  llm_withdraw: "bg-[var(--yellow)]",
+  resolve_expired: "bg-purple-400",
+  warning: "bg-[var(--yellow)]",
+  cycle_error: "bg-[var(--red)]",
+};
+
 export default function Dashboard() {
   const { data: status, loading: statusLoading } = useFetch<Status>("/api/status");
   const { data: balances, loading: balancesLoading } = useFetch<Balances>("/api/balances");
@@ -174,6 +320,7 @@ export default function Dashboard() {
   const { data: revenue } = useFetch<Revenue>("/api/revenue");
   const { data: costs } = useFetch<Costs>("/api/costs");
   const { data: actionsData, loading: actionsLoading } = useFetch<{ actions: Action[] }>("/api/actions");
+  const { data: historyData } = useFetch<{ history: HistoryPoint[] }>("/api/history", 30000);
 
   const actions = actionsData?.actions ?? [];
   const explorerUrl = status?.explorerUrl ?? "https://basescan.org";
@@ -181,193 +328,184 @@ export default function Dashboard() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">Proofwell Agent</h1>
           <p className="text-[var(--text-dim)] text-sm">
-            Autonomous treasury manager on Base
+            Autonomous treasury agent on Base — earns from human screen time failures
           </p>
         </div>
         <div className="flex items-center gap-3">
           {status && <NetworkBadge network={status.network} />}
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${status ? "bg-[var(--green)]" : statusLoading ? "bg-[var(--yellow)] animate-pulse" : "bg-[var(--red)]"}`} />
-            <span className="text-sm text-[var(--text-dim)]">
-              {status ? `Cycle #${status.uptime.cycleCount}` : statusLoading ? "Connecting..." : "Offline"}
+            <div className={`w-2 h-2 rounded-full ${status ? "bg-[var(--green)] animate-pulse" : statusLoading ? "bg-[var(--yellow)] animate-pulse" : "bg-[var(--red)]"}`} />
+            <span className="text-sm font-medium" style={{ color: status ? "var(--green)" : "var(--text-dim)" }}>
+              {status ? "Live" : statusLoading ? "Connecting..." : "Offline"}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Wallet info */}
-      <div className="mb-6 text-xs font-mono text-[var(--text-dim)]">
-        {status ? (
-          <>
-            Agent:{" "}
-            <a
-              href={`${explorerUrl}/address/${status.agent}`}
-              target="_blank"
-              className="text-[var(--blue)] hover:underline"
-            >
-              {status.agent}
-            </a>
-            <span className="mx-2">|</span>
-            Contract:{" "}
-            <a
-              href={`${explorerUrl}/address/${status.proofwellContract}`}
-              target="_blank"
-              className="text-[var(--blue)] hover:underline"
-            >
-              {status.proofwellContract.slice(0, 10)}...{status.proofwellContract.slice(-8)}
-            </a>
-          </>
-        ) : (
-          <Skeleton className="h-4 w-96" />
-        )}
+      {/* Wallet info + uptime */}
+      <div className="mb-6 space-y-1">
+        <div className="text-xs font-mono text-[var(--text-dim)]">
+          {status ? (
+            <>
+              Agent:{" "}
+              <a href={`${explorerUrl}/address/${status.agent}`} target="_blank" className="text-[var(--blue)] hover:underline">
+                {status.agent}
+              </a>
+              <span className="mx-2">|</span>
+              Contract:{" "}
+              <a href={`${explorerUrl}/address/${status.proofwellContract}`} target="_blank" className="text-[var(--blue)] hover:underline">
+                {status.proofwellContract.slice(0, 10)}...{status.proofwellContract.slice(-8)}
+              </a>
+            </>
+          ) : (
+            <Skeleton className="h-4 w-96" />
+          )}
+        </div>
+        <Uptime status={status} />
       </div>
+
+      {/* Self-sustaining score — the hero metric */}
+      <Card title="Self-Sustaining Score" className="mb-6">
+        <SustainabilityGauge score={pnl ? pnl.ratio : 0} pnl={pnl} loading={pnlLoading} />
+      </Card>
+
+      {/* Revenue vs Costs chart */}
+      <Card title="Revenue vs Costs Over Time" className="mb-6">
+        <FinancialChart history={historyData?.history ?? []} />
+      </Card>
 
       {/* How It Works */}
       <HowItWorks />
 
-      {/* Self-sustaining score */}
-      <Card title="Self-Sustaining Score" className="mb-6">
-        <SustainabilityGauge score={pnl ? pnl.ratio : 0} loading={pnlLoading} />
-        <p className="text-xs text-[var(--text-dim)] mt-2">
-          {pnl?.selfSustaining
-            ? "Agent is profitable — revenue exceeds costs"
-            : "Agent is not yet self-sustaining — building toward profitability"}
-        </p>
-      </Card>
-
-      {/* Balance + P&L row */}
+      {/* Balance + Revenue + Costs row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <Card title="Balances">
+        <Card title="Treasury Balances">
           <div className="space-y-3">
-            <Metric label="ETH" value={balances?.eth.formatted ?? "—"} loading={balancesLoading} />
-            <Metric label="USDC (wallet)" value={`$${balances?.usdc.formatted ?? "—"}`} loading={balancesLoading} />
+            <Metric label="ETH (gas)" value={balances?.eth.formatted ?? "---"} loading={balancesLoading} />
+            <Metric label="USDC (liquid)" value={`$${balances?.usdc.formatted ?? "---"}`} loading={balancesLoading} />
             <Metric
-              label="USDC (Aave)"
-              value={`$${balances?.aUsdc.formatted ?? "—"}`}
-              sub={balances ? `${balances.aavePercent}% deployed` : undefined}
+              label="USDC (Aave V3)"
+              value={`$${balances?.aUsdc.formatted ?? "---"}`}
+              sub={balances ? `${balances.aavePercent}% deployed for yield` : undefined}
               loading={balancesLoading}
             />
             <div className="pt-2 border-t border-[var(--border)]">
-              <Metric label="Total USDC" value={`$${balances?.totalUsdc.formatted ?? "—"}`} loading={balancesLoading} />
+              <Metric label="Total AUM" value={`$${balances?.totalUsdc.formatted ?? "---"}`} loading={balancesLoading} />
             </div>
           </div>
         </Card>
 
-        <Card title="Revenue">
+        <Card title="Revenue Streams">
           <Metric
-            label="Total"
+            label="Total Revenue"
             value={`$${pnl?.revenue.toFixed(4) ?? "0.0000"}`}
             color="text-[var(--green)]"
             loading={pnlLoading}
           />
-          <div className="mt-3 space-y-1">
+          <div className="mt-3 space-y-2">
             {revenue?.bySource.map((s) => (
               <div key={s.source} className="flex justify-between text-xs">
-                <span className="text-[var(--text-dim)]">{s.source}</span>
-                <span className="font-mono">${s.total.toFixed(4)}</span>
+                <span className="text-[var(--text-dim)]">{SOURCE_LABELS[s.source] ?? s.source}</span>
+                <span className="font-mono text-[var(--green)]">${s.total.toFixed(4)}</span>
               </div>
             ))}
             {(!revenue?.bySource.length) && (
-              <div className="text-xs text-[var(--text-dim)]">No revenue yet</div>
+              <div className="text-xs text-[var(--text-dim)]">Accruing yield from Aave V3...</div>
             )}
           </div>
         </Card>
 
-        <Card title="Costs">
+        <Card title="Operating Costs">
           <Metric
-            label="Total"
+            label="Total Costs"
             value={`$${pnl?.costs.toFixed(4) ?? "0.0000"}`}
             color="text-[var(--red)]"
             loading={pnlLoading}
           />
-          <div className="mt-3 space-y-1">
+          <div className="mt-3 space-y-2">
             {costs?.byCategory.map((c) => (
               <div key={c.category} className="flex justify-between text-xs">
-                <span className="text-[var(--text-dim)]">{c.category}</span>
-                <span className="font-mono">${c.total.toFixed(4)}</span>
+                <span className="text-[var(--text-dim)]">{COST_LABELS[c.category] ?? c.category}</span>
+                <span className="font-mono text-[var(--red)]">${c.total.toFixed(4)}</span>
               </div>
             ))}
             {(!costs?.byCategory.length) && (
-              <div className="text-xs text-[var(--text-dim)]">No costs yet</div>
+              <div className="text-xs text-[var(--text-dim)]">Tracking compute + gas costs...</div>
             )}
           </div>
         </Card>
       </div>
 
-      {/* P&L ticker */}
-      <Card title="P&L" className="mb-6">
-        {pnlLoading ? (
-          <Skeleton className="h-9 w-32" />
-        ) : (
-          <div className="flex items-baseline gap-4">
-            <span className="text-3xl font-mono font-bold" style={{ color: pnl && pnl.profit >= 0 ? "var(--green)" : "var(--red)" }}>
-              {pnl ? `${pnl.profit >= 0 ? "+" : ""}$${pnl.profit.toFixed(4)}` : "$0.0000"}
-            </span>
-            <span className="text-sm text-[var(--text-dim)]">
-              {pnl?.selfSustaining ? "Profitable" : "Pre-revenue"}
-            </span>
-          </div>
-        )}
-      </Card>
-
       {/* x402 Attestation panel */}
       <Card title="x402 Behavioral Attestation" className="mb-6">
-        <div className="text-sm text-[var(--text-dim)] mb-3">
-          Other DeFi protocols pay to ask: <span className="text-[var(--text)] font-medium">"Is this wallet holder disciplined?"</span>
-        </div>
-        <div className="bg-[var(--bg)] rounded-md p-3 font-mono text-xs overflow-x-auto">
-          <span className="text-[var(--green)]">GET</span>{" "}
-          <span className="text-[var(--blue)]">/v1/attestation/0x...</span>
-          <div className="mt-2 text-[var(--text-dim)]">
-            {`{ "wallet": "0x...", "disciplineScore": 0.85, "totalStakes": 3, "successRate": 0.67, "attestedAt": "..." }`}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="text-sm text-[var(--text-dim)] mb-3">
+              Novel revenue stream: other DeFi protocols pay to query{" "}
+              <span className="text-[var(--text)] font-medium">"Is this wallet holder disciplined?"</span>
+            </div>
+            <div className="text-xs text-[var(--text-dim)] space-y-1">
+              <div>Use cases: undercollateralized lending, insurance pricing, reputation</div>
+              <div>Price: 0.01 USDC/query via x402 payment protocol</div>
+            </div>
           </div>
-        </div>
-        <div className="mt-2 text-xs text-[var(--text-dim)]">
-          0.01 USDC per query via x402 payment protocol
+          <div className="bg-[var(--bg)] rounded-md p-3 font-mono text-xs overflow-x-auto">
+            <div className="mb-1">
+              <span className="text-[var(--green)]">GET</span>{" "}
+              <span className="text-[var(--blue)]">/v1/attestation/0xABC...</span>
+            </div>
+            <div className="text-[var(--text-dim)] whitespace-pre">{`{
+  "disciplineScore": 85,
+  "totalStakes": 3,
+  "successRate": 0.67,
+  "isActive": true,
+  "source": "proofwell"
+}`}</div>
+          </div>
         </div>
       </Card>
 
       {/* Action log */}
-      <Card title="Action Log">
+      <Card title={`Action Log (${actions.length} events)`}>
         {actionsLoading ? (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
         ) : (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-1 max-h-96 overflow-y-auto">
             {actions.length === 0 && (
-              <div className="text-sm text-[var(--text-dim)]">No actions yet — agent will log activity here</div>
+              <div className="text-sm text-[var(--text-dim)]">Agent is running — actions will appear here</div>
             )}
             {actions.map((a) => (
               <div
                 key={a.id}
-                className="flex items-start gap-3 text-xs py-2 border-b border-[var(--border)] last:border-0 animate-[fadeIn_0.3s_ease-in]"
+                className="flex items-start gap-3 text-xs py-2 border-b border-[var(--border)] last:border-0"
               >
-                <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${a.success ? "bg-[var(--green)]" : "bg-[var(--red)]"}`} />
+                <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${a.success ? (ACTION_COLORS[a.type] ?? "bg-[var(--green)]") : "bg-[var(--red)]"}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-medium">{a.type}</span>
+                    <span className="font-mono font-medium text-[var(--text)]">{a.type}</span>
                     <span className="text-[var(--text-dim)]">
                       {new Date(a.timestamp + "Z").toLocaleString()}
                     </span>
+                    {a.tx_hash && (
+                      <a
+                        href={`${explorerUrl}/tx/${a.tx_hash}`}
+                        target="_blank"
+                        className="text-[var(--blue)] hover:underline"
+                      >
+                        tx:{a.tx_hash.slice(0, 10)}...
+                      </a>
+                    )}
                   </div>
-                  <div className="text-[var(--text-dim)] truncate">{a.description}</div>
-                  {a.tx_hash && (
-                    <a
-                      href={`${explorerUrl}/tx/${a.tx_hash}`}
-                      target="_blank"
-                      className="text-[var(--blue)] hover:underline"
-                    >
-                      {a.tx_hash.slice(0, 16)}...
-                    </a>
-                  )}
+                  <div className="text-[var(--text-dim)]">{a.description}</div>
                 </div>
                 {a.amount_usdc > 0 && (
-                  <span className="font-mono text-[var(--green)]">${a.amount_usdc.toFixed(2)}</span>
+                  <span className="font-mono text-[var(--green)] flex-shrink-0">${a.amount_usdc.toFixed(4)}</span>
                 )}
               </div>
             ))}
@@ -376,8 +514,16 @@ export default function Dashboard() {
       </Card>
 
       {/* Footer */}
-      <div className="mt-8 text-center text-xs text-[var(--text-dim)]">
-        Proofwell Agent — Built for ETHDenver 2026 — {status?.network === "base-sepolia" ? "Base Sepolia Testnet" : "Base Mainnet"}
+      <div className="mt-8 flex items-center justify-between text-xs text-[var(--text-dim)]">
+        <span>Proofwell Agent — ETHDenver 2026</span>
+        <div className="flex items-center gap-3">
+          <a href={`${explorerUrl}/address/${status?.agent}`} target="_blank" className="text-[var(--blue)] hover:underline">
+            BaseScan
+          </a>
+          <a href="https://github.com/0xrafi/proofwell-agent" target="_blank" className="text-[var(--blue)] hover:underline">
+            GitHub
+          </a>
+        </div>
       </div>
     </div>
   );
