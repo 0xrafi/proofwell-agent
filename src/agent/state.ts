@@ -125,6 +125,17 @@ export function getRecentActions(limit = 50): Array<{
     .all(limit) as any;
 }
 
+/** Look up resolved stake actions for a wallet address */
+export function getResolvedStakesForWallet(wallet: string): Array<{
+  description: string;
+  amount_usdc: number;
+  tx_hash: string | null;
+}> {
+  return getDb()
+    .prepare(`SELECT description, amount_usdc, tx_hash FROM actions WHERE type = 'resolve_expired' AND success = 1 AND description LIKE ?`)
+    .all(`%${wallet.slice(0, 10)}%`) as any;
+}
+
 export function getRevenueBySource(): Array<{ source: string; total: number }> {
   return getDb()
     .prepare(`SELECT source, SUM(amount_usdc) as total FROM revenue GROUP BY source ORDER BY total DESC`)

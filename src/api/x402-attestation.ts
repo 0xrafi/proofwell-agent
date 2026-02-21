@@ -1,8 +1,9 @@
 import { type Request, type Response } from "express";
-import { type Address, isAddress } from "viem";
+import { type Address, isAddress, formatUnits } from "viem";
 import { getAllStakes, SECONDS_PER_DAY, type StakeInfo } from "../actions/proofwell.js";
-import { logRevenue } from "../agent/state.js";
+import { logRevenue, getResolvedStakesForWallet } from "../agent/state.js";
 import { config } from "../config.js";
+import { publicClient } from "../agent/wallet.js";
 
 /**
  * x402 Attestation Endpoint
@@ -27,7 +28,36 @@ export async function attestationHandler(req: Request, res: Response) {
 
   try {
     const stakes = await getAllStakes(wallet);
-    const attestation = buildAttestation(wallet, stakes);
+    let attestation = buildAttestation(wallet, stakes);
+
+    // If chain data is zeroed (resolved stakes), enrich from agent DB
+    if (!attestation.isStaking) {
+      const resolved = getResolvedStakesForWallet(wallet);
+      if (resolved.length > 0) {
+        let totalFailed = 0;
+        let totalDuration = 0;
+        let totalForfeited = 0;
+        for (const r of resolved) {
+          const match = r.description.match(/(\d+) failed days/);
+          if (match) totalFailed += parseInt(match[1]);
+          totalDuration += totalFailed > 0 ? totalFailed : 7; // estimate
+          totalForfeited += r.amount_usdc;
+        }
+        const successRate = totalDuration > 0 ? Math.max(1 - totalFailed / (totalDuration + totalFailed), 0) : 0;
+        attestation = {
+          ...attestation,
+          isStaking: true,
+          totalStakes: resolved.length,
+          stakeAmount: `${totalForfeited.toFixed(2)} USDC (forfeited)`,
+          stakeAsset: "USDC",
+          daysCompleted: Math.max(totalDuration - totalFailed, 0),
+          totalDays: totalDuration,
+          successRate: Math.round(successRate * 100) / 100,
+          disciplineScore: Math.round(successRate * 100 * 0.7),
+          isActive: false,
+        };
+      }
+    }
 
     // Check for x402 payment receipt in header
     const paymentReceipt = req.headers["x-payment-receipt"];
