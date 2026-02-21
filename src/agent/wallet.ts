@@ -14,8 +14,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { config } from "../config.js";
 import { appendBuilderCode } from "../actions/builder-codes.js";
 
-const account = privateKeyToAccount(config.privateKey);
-const chain = config.chain as Chain;
+export const account = privateKeyToAccount(config.privateKey);
+export const chain = config.chain as Chain;
 
 export const publicClient: PublicClient = createPublicClient({
   chain,

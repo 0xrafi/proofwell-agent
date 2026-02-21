@@ -1,5 +1,5 @@
 import { encodeFunctionData, type Address, formatUnits, type Hash } from "viem";
-import { publicClient, agentAddress, sendTransaction } from "../agent/wallet.js";
+import { publicClient, agentAddress, walletClient, account, chain, sendTransaction } from "../agent/wallet.js";
 import { config } from "../config.js";
 
 // Aave V3 Pool ABI (supply + withdraw only)
@@ -52,7 +52,8 @@ const erc20Abi = [
   },
 ] as const;
 
-/** Approve Aave USDC spending for Aave pool if needed */
+/** Approve Aave USDC spending for Aave pool if needed.
+ * Uses walletClient directly (no builder code) — approve is a prerequisite, not an agent action. */
 async function ensureApproval(amount: bigint): Promise<void> {
   const allowance = (await publicClient.readContract({
     address: config.aaveUsdc,
@@ -62,15 +63,21 @@ async function ensureApproval(amount: bigint): Promise<void> {
   })) as bigint;
 
   if (allowance < amount) {
+    // Approve max to avoid repeated approvals
+    const approveAmount = 2n ** 128n - 1n;
     const data = encodeFunctionData({
       abi: erc20Abi,
       functionName: "approve",
-      args: [config.aavePool, amount],
+      args: [config.aavePool, approveAmount],
     });
-    const hash = await sendTransaction({ to: config.aaveUsdc, data });
-    // Wait for approve to be mined before proceeding
-    await publicClient.waitForTransactionReceipt({ hash: hash as Hash });
-    console.log(`[aave] Approved ${formatUnits(amount, 6)} USDC for Aave`);
+    const hash = await walletClient.sendTransaction({
+      account,
+      chain,
+      to: config.aaveUsdc,
+      data,
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    console.log(`[aave] Approved USDC for Aave pool`);
   }
 }
 
