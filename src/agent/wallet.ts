@@ -30,7 +30,8 @@ export const walletClient: WalletClient = createWalletClient({
 
 export const agentAddress: Address = account.address;
 
-/** Send transaction with ERC-8021 builder code suffix appended to calldata */
+/** Send transaction with ERC-8021 builder code suffix appended to calldata.
+ *  Waits for on-chain confirmation and throws if the tx reverts. */
 export async function sendTransaction(tx: {
   to: Address;
   data?: `0x${string}`;
@@ -48,7 +49,14 @@ export async function sendTransaction(tx: {
     value: tx.value ?? 0n,
   });
 
-  console.log(`[tx] ${hash}`);
+  console.log(`[tx] submitted ${hash}`);
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status === "reverted") {
+    throw new Error(`Transaction ${hash} reverted on-chain`);
+  }
+
+  console.log(`[tx] confirmed ${hash} (block ${receipt.blockNumber})`);
   return hash;
 }
 

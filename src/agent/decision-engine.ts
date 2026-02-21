@@ -14,8 +14,6 @@ import {
 import { logAction, logRevenue, logCost, getState, setState } from "./state.js";
 import OpenAI from "openai";
 
-// Estimated per-cycle compute cost (Railway $5/mo ≈ $0.007/hr, 12 cycles/hr ≈ $0.0006/cycle)
-const COMPUTE_COST_PER_CYCLE = 0.0006;
 // Estimated gas cost per tx in USD (Base L2, ~$0.001-0.01)
 const GAS_COST_ESTIMATE_USD = 0.005;
 
