@@ -1,4 +1,4 @@
-import { encodeFunctionData, type Address, formatUnits, formatEther } from "viem";
+import { encodeFunctionData, type Address, formatUnits, formatEther, getAddress } from "viem";
 import { publicClient, agentAddress, sendTransaction } from "../agent/wallet.js";
 import { config } from "../config.js";
 
@@ -162,7 +162,7 @@ const KNOWN_STAKERS: Address[] = [
   "0x385DBB4a23af0bF6d26a35f9B273716B78a0D143",
   "0xAa067a1821b466488827f60F3Cfd6822144120c0",
   "0x4e45B7a1D403E2d09b757c3FB909BA2cBCD59cF5",
-];
+].map(a => getAddress(a));
 
 export interface StakeInfo {
   user: Address;
