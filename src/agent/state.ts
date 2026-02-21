@@ -13,6 +13,9 @@ export function getDb(): Database.Database {
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL");
     initSchema(db);
+    // One-time cleanup: remove bogus $20 yield entries from deposit-as-yield bug
+    db.exec(`DELETE FROM revenue WHERE source = 'aave_yield' AND amount_usdc > 1`);
+    db.exec(`DELETE FROM actions WHERE type = 'aave_yield' AND amount_usdc > 1`);
   }
   return db;
 }
