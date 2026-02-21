@@ -18,6 +18,16 @@ export function getDb(): Database.Database {
 }
 
 function initSchema(db: Database.Database) {
+  // One-time cleanup: remove bogus yield data from deposit-as-yield bug (Feb 21 2026)
+  // Safe to remove this block after first deploy
+  try {
+    const bad = db.prepare(`SELECT COUNT(*) as cnt FROM revenue WHERE source = 'aave_yield' AND amount_usdc > 1`).get() as any;
+    if (bad?.cnt > 0) {
+      db.exec(`DELETE FROM revenue; DELETE FROM costs; DELETE FROM actions; DELETE FROM state;`);
+      console.log("[db] Cleaned up bogus data from yield tracking bug");
+    }
+  } catch { /* tables don't exist yet, fine */ }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS actions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

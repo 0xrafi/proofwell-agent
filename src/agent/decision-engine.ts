@@ -48,7 +48,9 @@ async function deterministicDecisions(): Promise<Decision[]> {
   const state = await gatherState();
   const { balances } = state;
 
-  // Rule 0: Track Aave yield as revenue
+  // Rule 0: Track Aave yield as revenue (only interest, not deposits)
+  // Deposits update last_aave_position immediately after executing, so the
+  // delta here only captures real yield accrued between cycles.
   const aavePosition = state.aavePosition;
   const lastAavePosition = getState("last_aave_position");
   if (lastAavePosition) {
@@ -56,8 +58,9 @@ async function deterministicDecisions(): Promise<Decision[]> {
     if (aavePosition > prev) {
       const yieldDelta = aavePosition - prev;
       const yieldUsdc = Number(formatUnits(yieldDelta, 6));
-      if (yieldUsdc > 0.000001) {
-        logRevenue("aave_yield", yieldUsdc, undefined, `Aave V3 interest accrued: ${formatUnits(yieldDelta, 6)} USDC`);
+      // Cap at $1 to catch any deposit-as-yield bugs — real yield is tiny
+      if (yieldUsdc > 0.000001 && yieldUsdc < 1.0) {
+        logRevenue("aave_yield", yieldUsdc, undefined, `Aave V3 interest: ${formatUnits(yieldDelta, 6)} USDC`);
         logAction("aave_yield", `Earned ${formatUnits(yieldDelta, 6)} USDC yield from Aave V3`, undefined, yieldUsdc);
       }
     }
@@ -76,6 +79,9 @@ async function deterministicDecisions(): Promise<Decision[]> {
         const hash = await supplyUsdc(depositAmount);
         logAction("aave_supply", `Deposited ${formatUnits(depositAmount, 6)} USDC to Aave`, hash, Number(formatUnits(depositAmount, 6)));
         logCost("gas", GAS_COST_ESTIMATE_USD, "Aave supply tx gas");
+        // Update position tracker so deposit isn't counted as yield next cycle
+        const newPosition = await getAavePosition();
+        setState("last_aave_position", newPosition.toString());
       },
     });
   }
@@ -198,6 +204,8 @@ Should you rebalance? Reply with JSON:
         execute: async () => {
           const hash = await supplyUsdc(amountRaw);
           logAction("llm_deposit", decision.reason, hash, decision.amount_usdc);
+          const newPos = await getAavePosition();
+          setState("last_aave_position", newPos.toString());
         },
       };
     }
@@ -209,6 +217,8 @@ Should you rebalance? Reply with JSON:
         execute: async () => {
           const hash = await withdrawUsdc(amountRaw);
           logAction("llm_withdraw", decision.reason, hash, decision.amount_usdc);
+          const newPos = await getAavePosition();
+          setState("last_aave_position", newPos.toString());
         },
       };
     }
